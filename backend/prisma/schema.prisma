@@ -1,0 +1,359 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Organization {
+  id           String         @id @default(uuid())
+  name         String
+  domain       String?
+  createdAt    DateTime       @default(now())
+  users        User[]
+  documents    Document[]
+  auditLogs    AuditLog[]
+  workflows    WorkflowTemplate[]
+  notifications Notification[]
+  activityLogs ActivityLog[]
+  folders      Folder[]
+  savedSearches SavedSearch[]
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  name             String
+  email            String            @unique
+  passwordHash     String
+  role             Role              @default(VIEWER)
+  status           UserStatus        @default(ACTIVE)
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  createdAt        DateTime          @default(now())
+  documents        Document[]
+  uploadedVersions DocumentVersion[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  activityLogs     ActivityLog[]
+  refreshTokens    RefreshToken[]
+  loginHistory     LoginHistory[]
+  savedSearches    SavedSearch[]
+  searchHistory    SearchHistory[]
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+enum DocumentStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Document {
+  id             String            @id @default(uuid())
+  title          String
+  description    String?
+  fileName       String
+  mimeType       String
+  fileSize       Int
+  ownerId        String
+  owner          User              @relation(fields: [ownerId], references: [id])
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  currentVersion Int               @default(1)
+  status         DocumentStatus    @default(ACTIVE)
+  processingStatus ProcessingStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  lastVerifiedAt DateTime?
+  versions       DocumentVersion[]
+  metadata       DocumentMetadata?
+  auditLogs      AuditLog[]
+  workflowInstances WorkflowInstance[]
+
+  @@index([ownerId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model DocumentVersion {
+  id            String   @id @default(uuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  storagePath   String
+  fileHash      String
+  blockchainTxHash String?
+  verificationStatus String? // Added for Blockchain Phase
+  uploadedById  String
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([documentId])
+  @@index([fileHash])
+}
+
+model DocumentMetadata {
+  id           String   @id @default(uuid())
+  documentId   String   @unique
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  department   String?
+  category     String?
+  tags         String[]
+  customFields Json?
+
+  @@index([department])
+  @@index([category])
+  @@index([tags], type: Gin)
+}
+
+enum AuditAction {
+  UPLOAD
+  UPDATE
+  DELETE
+  DOWNLOAD
+  ROLLBACK
+  WORKFLOW_START
+  WORKFLOW_APPROVE
+  WORKFLOW_REJECT
+  WORKFLOW_ESCALATE
+  LOGIN
+  LOGOUT
+  FAILED_LOGIN
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  actionType     AuditAction
+  documentId     String?
+  document       Document?    @relation(fields: [documentId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  ipAddress      String?
+  timestamp      DateTime     @default(now())
+
+  @@index([documentId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([actionType])
+}
+
+// Workflow Models
+
+model WorkflowTemplate {
+  id             String         @id @default(uuid())
+  name           String
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  createdBy      String
+  createdAt      DateTime       @default(now())
+  steps          WorkflowStep[]
+  slaConfig      SLAConfig?
+  instances      WorkflowInstance[]
+
+  @@index([organizationId])
+}
+
+model WorkflowStep {
+  id                 String           @id @default(uuid())
+  workflowTemplateId String
+  workflowTemplate   WorkflowTemplate @relation(fields: [workflowTemplateId], references: [id], onDelete: Cascade)
+  stepOrder          Int
+  roleRequired       Role
+  stepName           String
+  isFinal            Boolean          @default(false)
+  condition          String?          // e.g. "metadata.totalAmount > 50000"
+}
+
+enum WorkflowStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+model WorkflowInstance {
+  id                 String            @id @default(uuid())
+  documentId         String
+  document           Document          @relation(fields: [documentId], references: [id])
+  workflowTemplateId String
+  workflowTemplate   WorkflowTemplate  @relation(fields: [workflowTemplateId], references: [id])
+  currentStep        Int               @default(1)
+  status             WorkflowStatus    @default(PENDING)
+  startedAt          DateTime          @default(now())
+  completedAt        DateTime?
+  actions            ApprovalAction[]
+
+  @@index([status])
+  @@index([documentId])
+  @@index([workflowTemplateId])
+}
+
+enum ApprovalActionType {
+  APPROVE
+  REJECT
+}
+
+model ApprovalAction {
+  id                 String             @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance   @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+  stepId             String // Keeping as string to reference Step ID logic if needed, or just descriptive
+  action             ApprovalActionType
+  comment            String?
+  performedBy        String
+  performedAt        DateTime           @default(now())
+
+  @@index([workflowInstanceId])
+}
+
+model SLAConfig {
+  id                 String           @id @default(uuid())
+  workflowTemplateId String           @unique
+  workflowTemplate   WorkflowTemplate @relation(fields: [workflowTemplateId], references: [id], onDelete: Cascade)
+  maxApprovalHours   Int
+  escalationRole     Role
+}
+
+// Notification & Activity Models
+
+enum NotificationType {
+  DOCUMENT
+  WORKFLOW
+  SYSTEM
+}
+
+enum EntityType {
+  DOCUMENT
+  WORKFLOW
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  type           NotificationType
+  title          String
+  message        String
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model ActivityLog {
+  id             String           @id @default(uuid())
+  actorId        String
+  actor          User             @relation(fields: [actorId], references: [id])
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  entityType     EntityType
+  entityId       String
+  action         String
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+// New Models for Enterprise Upgrade
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  replacedByToken String?
+  
+  @@index([userId])
+  @@index([token])
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String
+  userAgent String?
+  success   Boolean  @default(true)
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Folder {
+  id             String   @id @default(uuid())
+  name           String
+  parentId       String?
+  parent         Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children       Folder[] @relation("FolderHierarchy")
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([parentId])
+}
+
+model SavedSearch {
+  id             String   @id @default(uuid())
+  name           String
+  query          String
+  filters        Json?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  isShared       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model SearchHistory {
+  id        String   @id @default(uuid())
+  query     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  timestamp DateTime @default(now())
+  
+  @@index([userId])
+}

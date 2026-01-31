@@ -1,0 +1,166 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import dotenv from 'dotenv';
+import authRoutes from './routes/authRoutes';
+import { rateLimiter } from './middleware/rateLimiter';
+import orgRoutes from './routes/organizationRoutes';
+import userRoutes from './routes/userRoutes';
+import documentRoutes from './routes/documentRoutes';
+import workflowRoutes from './routes/workflowRoutes';
+import notificationRoutes from './routes/notificationRoutes';
+import analyticsRoutes from './analytics/analyticsRoutes';
+import searchRoutes from './routes/searchRoutes';
+import folderRoutes from './routes/folderRoutes';
+import prisma from './utils/prisma';
+import redisClient from './utils/redis';
+import { v4 as uuidv4 } from 'uuid';
+import minioClient, { ensureBucketExists, BUCKET_NAME } from './storage/minioClient';
+import axios from 'axios';
+import { checkSLABreaches } from './services/slaService';
+import Logger from './utils/logger';
+import { initializeSocketServer } from './sockets/socketServer';
+import './events/handlers';
+import './workers/documentWorker';
+
+dotenv.config();
+
+const app = express();
+
+// Request ID Middleware
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] as string || uuidv4();
+  req.headers['x-request-id'] = requestId;
+  res.setHeader('X-Request-ID', requestId);
+  next();
+});
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' ? ['http://localhost', 'http://127.0.0.1'] : '*', // Update with actual domain in prod
+    methods: ['GET', 'POST']
+  }
+});
+
+// Initialize Socket Server
+initializeSocketServer(io);
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? ['http://localhost', 'http://127.0.0.1'] : '*', // Update with actual domain
+  credentials: true
+}));
+
+const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+app.use(morgan(morganFormat, {
+  stream: {
+    write: (message) => Logger.http(message.trim()),
+  },
+}));
+
+import { globalSanitizer } from './middleware/validation';
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(globalSanitizer);
+
+// Global Rate Limiter for Production
+if (process.env.NODE_ENV === 'production') {
+  app.use(rateLimiter);
+}
+
+// Routes
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', service: 'IntelliDocX Backend' });
+});
+
+app.get('/api/health/db', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'connected' });
+  } catch (error: any) {
+    Logger.error(`DB Health Check Failed: ${error.message}`);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.get('/api/health/cache', async (req, res) => {
+  try {
+    await redisClient.ping();
+    res.json({ status: 'ok', cache: 'connected' });
+  } catch (error: any) {
+    Logger.error(`Redis Health Check Failed: ${error.message}`);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.get('/api/health/storage', async (req, res) => {
+  try {
+    const exists = await minioClient.bucketExists(BUCKET_NAME);
+    res.json({ status: 'ok', storage: 'minio', bucket: BUCKET_NAME, accessible: exists });
+  } catch (error: any) {
+    Logger.error(`Storage Health Check Failed: ${error.message}`);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.get('/api/health/ai', async (req, res) => {
+  try {
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    const response = await axios.get(`${aiServiceUrl}/health`);
+    res.json({ status: 'ok', ai_service: response.data });
+  } catch (error: any) {
+    Logger.error(`AI Service Health Check Failed: ${error.message}`);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+import { tenantMiddleware } from './middleware/tenant';
+
+app.use('/api/auth', authRoutes);
+app.use(tenantMiddleware); // Enforce tenant for all subsequent routes
+app.use('/api/organizations', orgRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/workflows', workflowRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/folders', folderRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api', notificationRoutes); // Mount at /api to match /notifications path inside router
+
+// Initialize MinIO Bucket
+ensureBucketExists();
+
+// Initialize SLA Checker (Run every 15 minutes)
+setInterval(async () => {
+    try {
+        Logger.info('Running SLA Checker...');
+        await checkSLABreaches();
+    } catch (err) {
+        Logger.error(`SLA Checker failed: ${err}`);
+    }
+}, 15 * 60 * 1000);
+
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const requestId = res.getHeader('X-Request-ID');
+  Logger.error(`[${requestId}] Error: ${err.message}`, { stack: err.stack });
+  
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Internal Server Error';
+  
+  res.status(statusCode).json({
+    status: 'error',
+    statusCode,
+    message,
+    requestId,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+  });
+});
+
+export { app, httpServer, io };

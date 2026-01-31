@@ -1,0 +1,14 @@
+import EventEmitter from 'events';
+
+class AppEventBus extends EventEmitter {}
+
+export const eventBus = new AppEventBus();
+
+export const EVENTS = {
+  DOCUMENT_UPLOADED: 'DOCUMENT_UPLOADED',
+  WORKFLOW_STARTED: 'WORKFLOW_STARTED',
+  WORKFLOW_APPROVED: 'WORKFLOW_APPROVED',
+  WORKFLOW_REJECTED: 'WORKFLOW_REJECTED',
+  WORKFLOW_ESCALATED: 'WORKFLOW_ESCALATED',
+  AI_PROCESS: 'AI_PROCESS',
+};

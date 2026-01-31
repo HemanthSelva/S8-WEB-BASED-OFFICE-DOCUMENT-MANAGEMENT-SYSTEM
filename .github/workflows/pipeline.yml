@@ -1,0 +1,98 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: intellidocx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+        
+    - name: Install Backend Dependencies
+      working-directory: ./backend
+      run: npm ci
+      
+    - name: Run Migrations (Test DB)
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+      run: npx prisma migrate deploy
+
+    - name: Run Tests
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        JWT_ACCESS_SECRET: testsecret
+        JWT_REFRESH_SECRET: testsecret
+      run: npm test
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+        
+    - name: Install Frontend Dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Build Frontend
+      working-directory: ./frontend
+      run: npm run build
+
+  docker-build-check:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Build Backend Image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        push: false
+        tags: intellidocx/backend:latest
+        
+    - name: Build Frontend Image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile.prod
+        push: false
+        tags: intellidocx/frontend:latest

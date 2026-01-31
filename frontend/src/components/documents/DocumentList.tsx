@@ -1,0 +1,91 @@
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { FileText, ShieldCheck, History, Download, Trash2, Loader2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { Document } from '@/types';
+import { motion } from 'framer-motion';
+
+interface DocumentListProps {
+  documents: Document[];
+  loading: boolean;
+  onVerify: (id: string) => void;
+  onDelete: (id: string) => void;
+  onDownload: (id: string) => void;
+}
+
+export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownload }: DocumentListProps) => {
+  if (loading) {
+    return <div className="text-center py-8">Loading documents...</div>;
+  }
+
+  if (documents.length === 0) {
+    return <p className="text-center text-gray-500 py-8">No documents found.</p>;
+  }
+
+  return (
+    <div className="grid gap-4">
+      {documents.map((doc, index) => (
+        <motion.div
+          key={doc.id}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: index * 0.05 }}
+        >
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-blue-100 rounded text-blue-600">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    {doc.title}
+                    {doc.processingStatus === 'PROCESSING' && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Processing
+                      </Badge>
+                    )}
+                    {doc.processingStatus === 'FAILED' && (
+                      <Badge variant="destructive">Processing Failed</Badge>
+                    )}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Ver {doc.currentVersion} • {format(new Date(doc.createdAt), 'PP')}
+                  </p>
+                  <div className="flex gap-2 mt-1">
+                    {doc.metadata?.category && (
+                      <Badge variant="outline">
+                        {doc.metadata.category}
+                      </Badge>
+                    )}
+                    {doc.metadata?.department && (
+                      <Badge variant="outline">
+                        {doc.metadata.department}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => onVerify(doc.id)}>
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Verify
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onDownload(doc.id)}>
+                  <Download className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm">
+                  <History className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => onDelete(doc.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
