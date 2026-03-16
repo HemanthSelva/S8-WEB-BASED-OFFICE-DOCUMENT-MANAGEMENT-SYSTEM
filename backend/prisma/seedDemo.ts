@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import { hashPassword } from '../src/utils/password';
 import dotenv from 'dotenv';
 
@@ -23,10 +23,10 @@ async function main() {
 
   // 1. Create Organization (Upsert)
   const org = await prisma.organization.upsert({
-    where: { id: 'acme-corp-id' }, // Using a deterministic ID for upsert
+    where: { id: '11111111-1111-1111-1111-111111111111' }, // Consistent with demo data
     update: {},
     create: {
-      id: 'acme-corp-id',
+      id: '11111111-1111-1111-1111-111111111111',
       name: 'Acme Corp',
       domain: 'acme.com',
     },
@@ -79,48 +79,62 @@ async function main() {
 
   console.log('Users:', [admin.email, manager.email, employee.email]);
 
-  // 3. Create Workflow Template (Upsert not directly available for complex nested creates without unique constraint on name+org)
-  // We'll check if it exists first
-  const existingTemplate = await prisma.workflowTemplate.findFirst({
-    where: {
-      organizationId: org.id,
+  // 3. Create Workflow Templates
+  const templatesToCreate = [
+    {
       name: 'Standard Approval Process',
+      steps: [
+        { stepName: 'Manager Review', roleRequired: 'MANAGER' as Role, stepOrder: 1 },
+        { stepName: 'Final Approval', roleRequired: 'ADMIN' as Role, stepOrder: 2, isFinal: true },
+      ],
     },
-  });
+    {
+      name: 'Invoice Approval',
+      steps: [
+        { stepName: 'Finance Review', roleRequired: 'MANAGER' as Role, stepOrder: 1 },
+        { stepName: 'Final Payment Approval', roleRequired: 'ADMIN' as Role, stepOrder: 2, isFinal: true },
+      ],
+    },
+    {
+      name: 'Contract Review',
+      steps: [
+        { stepName: 'Legal Review', roleRequired: 'MANAGER' as Role, stepOrder: 1 },
+        { stepName: 'Executive Signature', roleRequired: 'ADMIN' as Role, stepOrder: 2, isFinal: true },
+      ],
+    },
+  ];
 
-  if (!existingTemplate) {
-    const template = await prisma.workflowTemplate.create({
-      data: {
-        name: 'Standard Approval Process',
-        organizationId: org.id,
-        createdBy: admin.id,
-        steps: {
-          create: [
-            {
-              stepName: 'Manager Review',
-              roleRequired: 'MANAGER',
-              stepOrder: 1,
-              isFinal: false,
+  for (const t of templatesToCreate) {
+    const existing = await prisma.workflowTemplate.findFirst({
+      where: { organizationId: org.id, name: t.name },
+    });
+
+    if (!existing) {
+      const template = await prisma.workflowTemplate.create({
+        data: {
+          name: t.name,
+          organizationId: org.id,
+          createdBy: admin.id,
+          steps: {
+            create: t.steps.map((s, idx) => ({
+              stepName: s.stepName,
+              roleRequired: s.roleRequired,
+              stepOrder: s.stepOrder,
+              isFinal: s.isFinal || false,
+            })),
+          },
+          slaConfig: {
+            create: {
+              maxApprovalHours: 24,
+              escalationRole: 'ADMIN',
             },
-            {
-              stepName: 'Final Approval',
-              roleRequired: 'ADMIN',
-              stepOrder: 2,
-              isFinal: true,
-            },
-          ],
-        },
-        slaConfig: {
-          create: {
-            maxApprovalHours: 24,
-            escalationRole: 'ADMIN',
           },
         },
-      },
-    });
-    console.log('Created Workflow Template:', template.name);
-  } else {
-    console.log('Workflow Template already exists:', existingTemplate.name);
+      });
+      console.log('Created Workflow Template:', template.name);
+    } else {
+      console.log('Workflow Template already exists:', existing.name);
+    }
   }
 
   // 4. Create Mock Notification (Optional: just create one if you want, or skip to avoid spamming)

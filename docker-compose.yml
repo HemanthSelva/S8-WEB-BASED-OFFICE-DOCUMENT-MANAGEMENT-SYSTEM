@@ -14,12 +14,16 @@ services:
       - JWT_ACCESS_SECRET=intellidocx-secret-key
       - JWT_REFRESH_SECRET=intellidocx-secret-key
       - DATABASE_URL=postgres://postgres:password@postgres:5432/intellidocx
+      - DIRECT_URL=postgres://postgres:password@postgres:5432/intellidocx
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - ELASTICSEARCH_NODE=http://elasticsearch:9200
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=intellidocx-documents
       - AI_SERVICE_URL=http://ai-service:8000
       - AI_SERVICE_API_KEY=intellidocx-ai-secret-key
     command: >
@@ -54,11 +58,14 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=documents
+      - MINIO_BUCKET=intellidocx-documents
       - AI_SERVICE_API_KEY=intellidocx-ai-secret-key
+    env_file:
+      - ./ai-service/.env
     depends_on:
       - elasticsearch
       - minio
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./ai-service:/app
 
@@ -88,7 +95,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5

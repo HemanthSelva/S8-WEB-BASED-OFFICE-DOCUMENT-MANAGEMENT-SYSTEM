@@ -1,10 +1,11 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileText, ShieldCheck, History, Download, Trash2, Loader2 } from 'lucide-react';
+import { FileText, ShieldCheck, History, Download, Trash2, Loader2, MessageSquare, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { Document } from '@/types';
 import { motion } from 'framer-motion';
+import { MetadataDisplay } from './MetadataDisplay';
 
 interface DocumentListProps {
   documents: Document[];
@@ -12,14 +13,16 @@ interface DocumentListProps {
   onVerify: (id: string) => void;
   onDelete: (id: string) => void;
   onDownload: (id: string) => void;
+  onPreview: (id: string) => void;
+  onChat: (id: string, title: string) => void;
 }
 
-export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownload }: DocumentListProps) => {
+export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownload, onPreview, onChat }: DocumentListProps) => {
   if (loading) {
     return <div className="text-center py-8">Loading documents...</div>;
   }
 
-  if (documents.length === 0) {
+  if (!Array.isArray(documents) || documents.length === 0) {
     return <p className="text-center text-gray-500 py-8">No documents found.</p>;
   }
 
@@ -54,17 +57,36 @@ export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownloa
                     Ver {doc.currentVersion} • {format(new Date(doc.createdAt), 'PP')}
                   </p>
                   <div className="flex gap-2 mt-1">
-                    {doc.metadata?.category && (
-                      <Badge variant="outline">
+                    {doc.metadata?.category ? (
+                      <Badge variant="outline" className="text-xs">
                         {doc.metadata.category}
                       </Badge>
-                    )}
+                    ) : doc.category ? (
+                      <div className="flex items-center gap-1">
+                        <Badge variant="default" className="bg-indigo-500 hover:bg-indigo-600 text-xs">
+                          {doc.category}
+                        </Badge>
+                      </div>
+                    ) : null}
+
                     {doc.metadata?.department && (
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="text-xs">
                         {doc.metadata.department}
                       </Badge>
                     )}
+
+                    {doc.confidence && doc.confidence > 0 && (
+                      <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                        {Math.round(doc.confidence * 100)}% Match
+                      </Badge>
+                    )}
                   </div>
+
+                  {/* AI Metadata Display */}
+                  <MetadataDisplay
+                    customFields={doc.metadata?.customFields}
+                    category={doc.metadata?.category || doc.category}
+                  />
                 </div>
               </div>
               <div className="flex gap-2">
@@ -72,8 +94,19 @@ export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownloa
                   <ShieldCheck className="w-4 h-4 mr-2" />
                   Verify
                 </Button>
+                <Button variant="ghost" size="sm" onClick={() => onPreview(doc.id)}>
+                  <Eye className="w-4 h-4" />
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => onDownload(doc.id)}>
                   <Download className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary hover:text-primary/80 hover:bg-primary/10"
+                  onClick={() => onChat(doc.id, doc.title)}
+                >
+                  <MessageSquare className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" size="sm">
                   <History className="w-4 h-4" />

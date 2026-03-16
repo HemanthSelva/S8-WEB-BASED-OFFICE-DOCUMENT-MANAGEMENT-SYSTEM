@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Upload, X } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { api } from '@/api/client';
@@ -45,7 +44,7 @@ export const DocumentUpload = ({ onUploadSuccess }: DocumentUploadProps) => {
 
     try {
       await api.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        // headers: { 'Content-Type': 'multipart/form-data' }, // Let axios set this with boundary
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round(
             (progressEvent.loaded * 100) / (progressEvent.total || 1)
@@ -86,7 +85,7 @@ export const DocumentUpload = ({ onUploadSuccess }: DocumentUploadProps) => {
           <DialogTitle>Upload New Document</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleUpload} className="space-y-4">
-          <div 
+          <div
             className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
@@ -95,10 +94,10 @@ export const DocumentUpload = ({ onUploadSuccess }: DocumentUploadProps) => {
             {file ? (
               <div className="flex items-center justify-center gap-2">
                 <span className="font-medium">{file.name}</span>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={(e) => { e.stopPropagation(); setFile(null); }}
                 >
                   <X className="w-4 h-4" />
@@ -110,10 +109,10 @@ export const DocumentUpload = ({ onUploadSuccess }: DocumentUploadProps) => {
                 <p>Drag & drop or click to select file</p>
               </div>
             )}
-            <Input 
-              id="file-upload" 
-              type="file" 
-              className="hidden" 
+            <Input
+              id="file-upload"
+              type="file"
+              className="hidden"
               onChange={handleFileChange}
             />
           </div>

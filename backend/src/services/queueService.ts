@@ -10,11 +10,13 @@ const connection = {
 
 export const documentQueue = new Queue('document-processing', { connection });
 
-export const addDocumentJob = async (documentId: string, filePath: string, organizationId: string) => {
+export const addDocumentJob = async (documentId: string, filePath: string, organizationId: string, title?: string, fileName?: string) => {
   await documentQueue.add('process-document', {
     documentId,
     filePath,
-    organizationId
+    organizationId,
+    title,
+    fileName
   }, {
     attempts: 3,
     backoff: {

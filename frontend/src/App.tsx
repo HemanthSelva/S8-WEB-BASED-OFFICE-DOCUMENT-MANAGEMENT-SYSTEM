@@ -4,24 +4,22 @@ import { store } from '@/store';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { AdminDashboard } from '@/pages/AdminDashboard';
+import { ManagerDashboard } from '@/pages/ManagerDashboard';
+import { EmployeeDashboard } from '@/pages/EmployeeDashboard';
 import { DocumentsPage } from '@/pages/DocumentsPage';
 import { WorkflowsPage } from '@/pages/WorkflowsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ProtectedRoute } from '@/router/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
+import { Button } from '@/components/ui/button';
 
-// Simple placeholders for missing dashboards
-const ManagerDashboard = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold mb-4">Manager Dashboard</h1>
-    <p>Welcome to the Manager Dashboard.</p>
-  </div>
-);
-
-const EmployeeDashboard = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold mb-4">Employee Dashboard</h1>
-    <p>Welcome to the Employee Dashboard.</p>
+const Unauthorized = () => (
+  <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+    <div className="text-center space-y-4">
+      <h1 className="text-4xl font-bold text-red-600">Access Denied</h1>
+      <p className="text-gray-600">You do not have permission to view this page.</p>
+      <Button onClick={() => window.history.back()}>Go Back</Button>
+    </div>
   </div>
 );
 
@@ -31,11 +29,11 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          
+
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<DashboardLayout />}>
-              
+
               {/* Admin Routes */}
               <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
                 <Route path="dashboard/admin" element={<AdminDashboard />} />
@@ -55,6 +53,7 @@ function App() {
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="workflows" element={<WorkflowsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="unauthorized" element={<Unauthorized />} />
 
               {/* Default Redirect */}
               <Route path="" element={<Navigate to="/dashboard/admin" replace />} />

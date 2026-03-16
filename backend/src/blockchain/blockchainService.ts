@@ -5,11 +5,11 @@ dotenv.config();
 
 // Contract ABI - simplified for our needs
 const DocumentRegistryABI = [
-  "function registerDocument(string memory _documentId, string memory _hash, string memory _uploaderId) public",
-  "function updateDocumentVersion(string memory _documentId, string memory _newHash, string memory _uploaderId) public",
-  "function getDocumentHash(string memory _documentId) public view returns (string memory)",
-  "function verifyDocument(string memory _documentId, string memory _hash) public view returns (bool, uint256)",
-  "function getDocumentHistory(string memory _documentId) public view returns (tuple(string hash, string uploaderId, uint256 timestamp, uint256 version)[])"
+    "function registerDocument(string memory _documentId, string memory _hash, string memory _uploaderId) public",
+    "function updateDocumentVersion(string memory _documentId, string memory _newHash, string memory _uploaderId) public",
+    "function getDocumentHash(string memory _documentId) public view returns (string memory)",
+    "function verifyDocument(string memory _documentId, string memory _hash) public view returns (bool, uint256)",
+    "function getDocumentHistory(string memory _documentId) public view returns (tuple(string hash, string uploaderId, uint256 timestamp, uint256 version)[])"
 ];
 
 class BlockchainService {
@@ -45,9 +45,10 @@ class BlockchainService {
         if (!this.isConnected) return null;
         try {
             console.log(`Registering document ${documentId} on blockchain...`);
+            const start = Date.now();
             const tx = await this.contract.registerDocument(documentId, hash, uploaderId);
             await tx.wait();
-            console.log(`Document registered. Tx: ${tx.hash}`);
+            console.log(`Document registered. Tx: ${tx.hash} (Took ${(Date.now() - start) / 1000}s)`);
             return tx.hash;
         } catch (error) {
             console.error("Error registering document on blockchain:", error);

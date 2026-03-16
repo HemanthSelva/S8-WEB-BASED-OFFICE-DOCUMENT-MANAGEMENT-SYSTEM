@@ -91,5 +91,4 @@ See `DEMO.md` for full production setup using `docker-compose.prod.yml`.
 - **Encryption**: At-rest (MinIO) and In-transit (TLS).
 - **Hardening**: Helmet headers, Rate limiting, Input sanitization.
 
----
-*Built by Hemanth Selva for Final Year Project Submission.*
+

@@ -3,8 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log('Redis Configuration:', {
+  REDIS_URL: process.env.REDIS_URL,
+  NODE_ENV: process.env.NODE_ENV
+});
+
 const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  url: process.env.REDIS_URL || 'redis://redis:6379',
   socket: {
     reconnectStrategy: (retries) => {
       if (retries > 10) {

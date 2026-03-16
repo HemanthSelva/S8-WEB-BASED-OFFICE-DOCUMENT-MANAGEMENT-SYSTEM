@@ -52,7 +52,9 @@ initializeSocketServer(io);
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? ['http://localhost', 'http://127.0.0.1'] : '*', // Update with actual domain
+  origin: process.env.NODE_ENV === 'production'
+    ? ['http://localhost', 'http://127.0.0.1', 'http://localhost:5173']
+    : true, // true matches the request origin, which works with credentials
   credentials: true
 }));
 
@@ -120,40 +122,46 @@ app.get('/api/health/ai', async (req, res) => {
   }
 });
 
+// Protected Routes (Require Auth & Tenant Context)
+import { requireAuth } from './middleware/auth';
 import { tenantMiddleware } from './middleware/tenant';
 
+// Routes
+// Public Routes
 app.use('/api/auth', authRoutes);
-app.use(tenantMiddleware); // Enforce tenant for all subsequent routes
-app.use('/api/organizations', orgRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/workflows', workflowRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/folders', folderRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api', notificationRoutes); // Mount at /api to match /notifications path inside router
+
+const protectedMiddleware = [requireAuth, tenantMiddleware];
+
+app.use('/api/organizations', protectedMiddleware, orgRoutes);
+app.use('/api/users', protectedMiddleware, userRoutes);
+app.use('/api/documents', protectedMiddleware, documentRoutes);
+app.use('/api/workflows', protectedMiddleware, workflowRoutes);
+app.use('/api/search', protectedMiddleware, searchRoutes);
+app.use('/api/folders', protectedMiddleware, folderRoutes);
+app.use('/api/analytics', protectedMiddleware, analyticsRoutes);
+app.use('/api', protectedMiddleware, notificationRoutes);
 
 // Initialize MinIO Bucket
 ensureBucketExists();
 
 // Initialize SLA Checker (Run every 15 minutes)
 setInterval(async () => {
-    try {
-        Logger.info('Running SLA Checker...');
-        await checkSLABreaches();
-    } catch (err) {
-        Logger.error(`SLA Checker failed: ${err}`);
-    }
+  try {
+    Logger.info('Running SLA Checker...');
+    await checkSLABreaches();
+  } catch (err) {
+    Logger.error(`SLA Checker failed: ${err}`);
+  }
 }, 15 * 60 * 1000);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   const requestId = res.getHeader('X-Request-ID');
   Logger.error(`[${requestId}] Error: ${err.message}`, { stack: err.stack });
-  
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
-  
+
   res.status(statusCode).json({
     status: 'error',
     statusCode,

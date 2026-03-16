@@ -15,8 +15,11 @@ export const signRefreshToken = (payload: object) => {
 
 export const verifyAccessToken = (token: string) => {
   try {
-    return jwt.verify(token, ACCESS_TOKEN_SECRET);
-  } catch (error) {
+    const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET);
+    console.log('[JWT] Verify Success:', decoded);
+    return decoded;
+  } catch (error: any) {
+    console.error('[JWT] Verify Failed:', error.message);
     return null;
   }
 };

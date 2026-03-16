@@ -1,11 +1,23 @@
+import { useEffect } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 
+import { socketService } from '@/api/socketService';
+
 export const DashboardLayout = () => {
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, token } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      socketService.connect(token);
+    }
+    return () => {
+      socketService.disconnect();
+    };
+  }, [isAuthenticated, token]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;

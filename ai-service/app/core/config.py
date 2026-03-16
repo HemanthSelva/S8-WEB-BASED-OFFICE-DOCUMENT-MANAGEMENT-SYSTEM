@@ -14,14 +14,17 @@ class Settings(BaseSettings):
     MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "minio:9000")
     MINIO_ACCESS_KEY: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     MINIO_SECRET_KEY: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "documents")
+    MINIO_BUCKET: str = os.getenv("MINIO_BUCKET", "intellidocx-documents")
     MINIO_SECURE: bool = False
     
     # Security
     AI_SERVICE_API_KEY: str = os.getenv("AI_SERVICE_API_KEY", "intellidocx-ai-secret-key")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     
     # Model
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_TIMEOUT: float = 30.0
 
     class Config:
         env_file = ".env"

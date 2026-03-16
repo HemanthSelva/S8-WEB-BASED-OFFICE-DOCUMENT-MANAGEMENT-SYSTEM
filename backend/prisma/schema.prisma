@@ -57,6 +57,7 @@ model User {
   loginHistory     LoginHistory[]
   savedSearches    SavedSearch[]
   searchHistory    SearchHistory[]
+  workflowLogs     WorkflowLog[]    @relation("UserWorkflowLogs")
 
   @@index([organizationId])
   @@index([email])
@@ -97,9 +98,15 @@ model Document {
   auditLogs      AuditLog[]
   workflowInstances WorkflowInstance[]
 
+  // Classification Fields
+  extractedText  String?           @db.Text
+  category       String?
+  confidence     Float?
+
   @@index([ownerId])
   @@index([organizationId])
   @@index([status])
+  @@index([category])
 }
 
 model DocumentVersion {
@@ -146,6 +153,7 @@ enum AuditAction {
   LOGIN
   LOGOUT
   FAILED_LOGIN
+  AI_CHAT
 }
 
 model AuditLog {
@@ -179,6 +187,7 @@ model WorkflowTemplate {
   slaConfig      SLAConfig?
   instances      WorkflowInstance[]
 
+  @@unique([name, organizationId])
   @@index([organizationId])
 }
 
@@ -211,6 +220,7 @@ model WorkflowInstance {
   startedAt          DateTime          @default(now())
   completedAt        DateTime?
   actions            ApprovalAction[]
+  logs               WorkflowLog[]
 
   @@index([status])
   @@index([documentId])
@@ -226,13 +236,29 @@ model ApprovalAction {
   id                 String             @id @default(uuid())
   workflowInstanceId String
   workflowInstance   WorkflowInstance   @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
-  stepId             String // Keeping as string to reference Step ID logic if needed, or just descriptive
+  stepId             String
   action             ApprovalActionType
   comment            String?
   performedBy        String
   performedAt        DateTime           @default(now())
 
   @@index([workflowInstanceId])
+}
+
+model WorkflowLog {
+  id                 String             @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance   @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+  action             String             // e.g., "ASSIGNED", "APPROVED", "REJECTED"
+  fromStatus         WorkflowStatus?
+  toStatus           WorkflowStatus?
+  performedById      String
+  performedBy        User               @relation("UserWorkflowLogs", fields: [performedById], references: [id])
+  comment            String?
+  createdAt          DateTime           @default(now())
+
+  @@index([workflowInstanceId])
+  @@index([performedById])
 }
 
 model SLAConfig {

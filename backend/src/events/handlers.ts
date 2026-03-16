@@ -1,9 +1,8 @@
 import { eventBus, EVENTS } from './eventBus';
 import * as notificationService from '../services/notificationService';
 import * as activityService from '../services/activityService';
-import { aiClientService } from '../services/aiClientService';
 import prisma from '../utils/prisma';
-import { Role, NotificationType, EntityType, ProcessingStatus } from '@prisma/client';
+import { Role, NotificationType, EntityType } from '@prisma/client';
 
 // Helper to find users by role
 const findUsersByRole = async (organizationId: string, role: Role) => {
@@ -17,7 +16,7 @@ const findUsersByRole = async (organizationId: string, role: Role) => {
 
 eventBus.on(EVENTS.DOCUMENT_UPLOADED, async (data) => {
   const { documentId, userId, organizationId, title, filePath } = data;
-  
+
   // Log Activity
   await activityService.logActivity(
     userId,
@@ -42,79 +41,12 @@ eventBus.on(EVENTS.DOCUMENT_UPLOADED, async (data) => {
     }
   }
 
-  // Trigger AI Processing
-  if (filePath) {
-      eventBus.emit(EVENTS.AI_PROCESS, {
-          documentId,
-          organizationId,
-          filePath
-      });
-  }
-});
-
-eventBus.on(EVENTS.AI_PROCESS, async (data) => {
-    const { documentId, organizationId, filePath } = data;
-    console.log(`[AI] Starting processing for document ${documentId}`);
-    
-    try {
-        // 1. Set Status to PROCESSING
-        await prisma.document.update({
-            where: { id: documentId },
-            data: { processingStatus: ProcessingStatus.PROCESSING }
-        });
-
-        const result = await aiClientService.processDocument(documentId, organizationId, filePath);
-        
-        // 2. Update Metadata & Status to COMPLETED
-        await prisma.document.update({
-            where: { id: documentId },
-            data: { 
-                processingStatus: ProcessingStatus.COMPLETED,
-                metadata: {
-                    upsert: {
-                        create: {
-                            department: result.department,
-                            category: result.category,
-                            tags: result.tags || []
-                        },
-                        update: {
-                            department: result.department,
-                            category: result.category,
-                            tags: result.tags || []
-                        }
-                    }
-                }
-            }
-        });
-
-        console.log(`[AI] Processing completed for document ${documentId}`);
-        
-        // Notify User
-        const doc = await prisma.document.findUnique({ where: { id: documentId } });
-        if (doc) {
-             await notificationService.createNotification(
-                doc.ownerId,
-                organizationId,
-                NotificationType.DOCUMENT,
-                'Document Processed',
-                `AI processing completed for "${doc.title}".`
-            );
-        }
-
-    } catch (error) {
-        console.error(`[AI] Failed to process document ${documentId}:`, error);
-        
-        // Set Status to FAILED
-        await prisma.document.update({
-            where: { id: documentId },
-            data: { processingStatus: ProcessingStatus.FAILED }
-        });
-    }
+  // AI Processing is now exclusively handled by BullMQ worker in documentController
 });
 
 eventBus.on(EVENTS.WORKFLOW_STARTED, async (data) => {
-  const { documentId, userId, organizationId, instanceId } = data;
-  
+  const { documentId, userId, organizationId, instanceId, currentStep } = data;
+
   // Log Activity
   await activityService.logActivity(
     userId,
@@ -124,10 +56,32 @@ eventBus.on(EVENTS.WORKFLOW_STARTED, async (data) => {
     'STARTED',
     { documentId }
   );
+
+  // Notify Approvers based on currentStep
+  const instance = await prisma.workflowInstance.findUnique({
+    where: { id: instanceId },
+    include: { workflowTemplate: { include: { steps: true } }, document: true }
+  });
+
+  if (instance) {
+    const step = instance.workflowTemplate.steps.find(s => s.stepOrder === currentStep);
+    if (step) {
+      const approvers = await findUsersByRole(organizationId, step.roleRequired);
+      for (const approver of approvers) {
+        await notificationService.createNotification(
+          approver.id,
+          organizationId,
+          NotificationType.WORKFLOW,
+          'Action Required: Document Approval',
+          `A new document "${instance.document.title}" requires your approval (${step.roleRequired}).`
+        );
+      }
+    }
+  }
 });
 
 eventBus.on(EVENTS.WORKFLOW_APPROVED, async (data) => {
-  const { documentId, userId, organizationId, instanceId, nextStep } = data;
+  const { documentId, userId, organizationId, instanceId, nextStep, ownerId, nextRole } = data;
 
   await activityService.logActivity(
     userId,
@@ -137,10 +91,38 @@ eventBus.on(EVENTS.WORKFLOW_APPROVED, async (data) => {
     'APPROVED',
     { documentId, nextStep }
   );
+
+  // 1. Notify Next Approver if exists
+  if (nextStep && nextRole) {
+    const approvers = await findUsersByRole(organizationId, nextRole);
+    for (const approver of approvers) {
+      await notificationService.createNotification(
+        approver.id,
+        organizationId,
+        NotificationType.WORKFLOW,
+        'Action Required: Document Approval',
+        `A document requires your approval step.`
+      );
+    }
+  }
+
+  // 2. Notify Owner (Instant Notification)
+  if (ownerId) {
+    const doc = await prisma.document.findUnique({ where: { id: documentId } });
+    await notificationService.createNotification(
+      ownerId,
+      organizationId,
+      NotificationType.WORKFLOW,
+      'Document Approved',
+      nextStep
+        ? `Your document "${doc?.title}" has been approved at the current level.`
+        : `Congratulations! Your document "${doc?.title}" has been fully APPROVED.`
+    );
+  }
 });
 
 eventBus.on(EVENTS.WORKFLOW_REJECTED, async (data) => {
-  const { documentId, userId, organizationId, instanceId } = data;
+  const { documentId, userId, organizationId, instanceId, ownerId } = data;
 
   await activityService.logActivity(
     userId,
@@ -151,30 +133,30 @@ eventBus.on(EVENTS.WORKFLOW_REJECTED, async (data) => {
     { documentId }
   );
 
-  // Notify Owner
-  const doc = await prisma.document.findUnique({ where: { id: documentId } });
-  if (doc) {
-      await notificationService.createNotification(
-          doc.ownerId,
-          organizationId,
-          NotificationType.WORKFLOW,
-          'Workflow Rejected',
-          `Your document "${doc.title}" was rejected.`
-      );
+  // Notify Owner (Instant Notification)
+  if (ownerId) {
+    const doc = await prisma.document.findUnique({ where: { id: documentId } });
+    await notificationService.createNotification(
+      ownerId,
+      organizationId,
+      NotificationType.WORKFLOW,
+      'Document Rejected',
+      `Your document "${doc?.title}" was REJECTED.`
+    );
   }
 });
 
 eventBus.on(EVENTS.WORKFLOW_ESCALATED, async (data) => {
-    const { documentId, organizationId, instanceId } = data;
+  const { documentId, organizationId, instanceId } = data;
 
-    const admins = await findUsersByRole(organizationId, Role.ADMIN);
-    for (const admin of admins) {
-        await notificationService.createNotification(
-            admin.id,
-            organizationId,
-            NotificationType.WORKFLOW,
-            'Workflow Escalated',
-            `Workflow for document ${documentId} has breached SLA.`
-        );
-    }
+  const admins = await findUsersByRole(organizationId, Role.ADMIN);
+  for (const admin of admins) {
+    await notificationService.createNotification(
+      admin.id,
+      organizationId,
+      NotificationType.WORKFLOW,
+      'Workflow Escalated',
+      `Workflow for document ${documentId} has breached SLA.`
+    );
+  }
 });

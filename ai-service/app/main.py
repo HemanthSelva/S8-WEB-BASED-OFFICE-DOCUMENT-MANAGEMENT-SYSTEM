@@ -2,17 +2,19 @@ from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.security import APIKeyHeader
 import uvicorn
 from datetime import datetime
+import time
 import os
 
 from app.core.config import settings
-from app.schemas.requestSchemas import DocumentProcessRequest, SearchRequest
-from app.schemas.responseSchemas import ProcessResponse, SearchResponse, SearchResult
 from app.utils.fileLoader import file_loader
 from app.utils.textCleaner import TextCleaner
 from app.services.ocrService import ocr_service
 from app.services.embeddingService import embedding_service
 from app.services.classificationService import classification_service
 from app.services.indexingService import indexing_service
+from app.services.chatService import chat_service
+from app.schemas.requestSchemas import DocumentProcessRequest, SearchRequest, ChatRequest
+from app.schemas.responseSchemas import ProcessResponse, SearchResponse, SearchResult, ChatResponse
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -58,7 +60,11 @@ async def process_document(request: DocumentProcessRequest):
         file_ext = os.path.splitext(request.filePath)[1]
         
         # 2. Extract Text (OCR if needed)
+        t0 = time.time()
         raw_text = ocr_service.extract_text(file_data, file_ext)
+        t_ocr = time.time() - t0
+        print(f"Extraction took: {t_ocr:.2f}s")
+
         if not raw_text:
             raise HTTPException(status_code=400, detail="Could not extract text from document")
             
@@ -66,21 +72,30 @@ async def process_document(request: DocumentProcessRequest):
         clean_text = TextCleaner.clean_text(raw_text)
         embedding_text = TextCleaner.normalize_for_embedding(raw_text)
         
-        # 4. Generate Embedding
-        embedding = embedding_service.generate_embedding(embedding_text)
+        # 4 & 5. Generate Embedding and Classify in parallel
+        import asyncio
+        t_start_ai = time.time()
         
-        # 5. Classify
-        classification = classification_service.classify_document(clean_text, embedding)
+        # We use to_thread to run these sync calls in parallel without blocking
+        embedding, classification = await asyncio.gather(
+            asyncio.to_thread(embedding_service.generate_embedding, embedding_text),
+            asyncio.to_thread(classification_service.classify_document, clean_text)
+        )
+        
+        print(f"Parallel AI tasks took: {time.time() - t_start_ai:.2f}s")
         
         # 6. Index
         doc_data = {
             "documentId": request.documentId,
             "organizationId": request.organizationId,
+            "title": request.title,
+            "fileName": request.fileName,
             "content": clean_text,
             "embedding": embedding,
             "department": classification["department"],
             "category": classification["category"],
             "tags": classification["suggestedTags"],
+            "extractedData": classification["extractedData"],
             "createdAt": datetime.utcnow().isoformat()
         }
         
@@ -92,7 +107,8 @@ async def process_document(request: DocumentProcessRequest):
             department=classification["department"],
             category=classification["category"],
             tags=classification["suggestedTags"],
-            confidence=classification["confidenceScore"]
+            confidence=classification["confidenceScore"],
+            extractedData=classification["extractedData"]
         )
 
     except Exception as e:
@@ -121,6 +137,8 @@ async def search_documents(request: SearchRequest):
                 score=hit.get("_score"),
                 department=source.get("department"),
                 category=source.get("category"),
+                tags=source.get("tags", []),
+                extractedData=source.get("extractedData", {}),
                 snippet=snippet
             ))
             
@@ -128,6 +146,20 @@ async def search_documents(request: SearchRequest):
 
     except Exception as e:
         print(f"Error searching documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/chat", response_model=ChatResponse, dependencies=[Depends(get_api_key)])
+async def chat_with_document(request: ChatRequest):
+    try:
+        result = await chat_service.query_document(
+            request.documentId,
+            request.organizationId,
+            request.message,
+            request.history
+        )
+        return ChatResponse(**result)
+    except Exception as e:
+        print(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

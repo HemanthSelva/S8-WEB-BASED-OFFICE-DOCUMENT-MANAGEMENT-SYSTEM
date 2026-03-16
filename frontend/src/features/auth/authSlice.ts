@@ -22,11 +22,11 @@ if (token) {
   try {
     const decoded: any = jwtDecode(token);
     user = {
-        id: decoded.userId,
-        email: decoded.email,
-        role: decoded.role,
-        organizationId: decoded.organizationId,
-        name: '' // Name might not be in token, or we fetch it separately
+      id: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+      organizationId: decoded.organizationId,
+      name: decoded.name || decoded.email.split('@')[0]
     };
   } catch (e) {
     localStorage.removeItem('token');

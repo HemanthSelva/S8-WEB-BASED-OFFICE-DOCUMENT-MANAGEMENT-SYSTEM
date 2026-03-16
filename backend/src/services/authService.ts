@@ -7,14 +7,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const login = async (email: string, password: string, ipAddress: string, userAgent: string) => {
   Logger.info(`[AuthService] Login attempt for: ${email}`);
-  
+
   const user = await prisma.user.findUnique({ where: { email } });
-  
+
   if (!user) {
     Logger.warn(`[AuthService] User not found: ${email}`);
-    // Log failed attempt if possible, but we don't have user ID
     throw new Error('Invalid credentials');
   }
+
+  Logger.info(`[AuthService] User found: ${user.id} (Role: ${user.role})`);
 
   if (user.status !== 'ACTIVE') {
     Logger.warn(`[AuthService] User inactive: ${email}`);
@@ -25,8 +26,10 @@ export const login = async (email: string, password: string, ipAddress: string, 
   }
 
   const isValid = await comparePassword(password, user.passwordHash);
-  
+  Logger.info(`[AuthService] Password valid: ${isValid}`);
+
   if (!isValid) {
+    Logger.warn(`[AuthService] Invalid password for: ${email}`);
     await prisma.loginHistory.create({
       data: { userId: user.id, ipAddress, userAgent, success: false }
     });
@@ -41,6 +44,7 @@ export const login = async (email: string, password: string, ipAddress: string, 
   const payload = {
     userId: user.id,
     email: user.email,
+    name: user.name,
     role: user.role,
     organizationId: user.organizationId
   };
@@ -101,6 +105,7 @@ export const refresh = async (token: string, ipAddress: string) => {
   const payload = {
     userId: user.id,
     email: user.email,
+    name: user.name,
     role: user.role,
     organizationId: user.organizationId
   };
@@ -139,21 +144,21 @@ export const logout = async (token: string) => {
   } catch (e) {
     // Token might not exist in DB if it was just a random string
   }
-  
+
   // Also add to Redis blacklist for immediate JWT invalidation if we were checking that for Access Tokens (we are)
   // But wait, logout usually sends Access Token. Refresh Token is separate.
   // If `token` here is Access Token, we blacklist it.
   // If `token` is Refresh Token, we revoke it.
   // Usually logout endpoint receives Access Token in header and maybe Refresh Token in body.
-  
+
   // Assuming this `logout` function handles Access Token blacklisting
   await redisClient.set(`blacklist:${token}`, 'true', { EX: 3600 });
 };
 
 export const revokeSession = async (refreshToken: string) => {
-    await prisma.refreshToken.update({
-        where: { token: refreshToken },
-        data: { revoked: true }
-    });
+  await prisma.refreshToken.update({
+    where: { token: refreshToken },
+    data: { revoked: true }
+  });
 };
 

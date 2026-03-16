@@ -1,6 +1,6 @@
 from elasticsearch import Elasticsearch
 from app.core.config import settings
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 class IndexingService:
     def __init__(self):
@@ -17,6 +17,8 @@ class IndexingService:
                     "properties": {
                         "documentId": {"type": "keyword"},
                         "organizationId": {"type": "keyword"},
+                        "title": {"type": "text", "analyzer": "standard"},
+                        "fileName": {"type": "text", "analyzer": "standard"},
                         "content": {"type": "text"},
                         "embedding": {
                             "type": "dense_vector",
@@ -27,6 +29,7 @@ class IndexingService:
                         "department": {"type": "keyword"},
                         "category": {"type": "keyword"},
                         "tags": {"type": "keyword"},
+                        "extractedData": {"type": "flattened"},
                         "createdAt": {"type": "date"}
                     }
                 }
@@ -76,7 +79,7 @@ class IndexingService:
                 "must": {
                     "multi_match": {
                         "query": query_text,
-                        "fields": ["content", "department", "category", "tags"],
+                        "fields": ["title^3", "fileName^2", "content", "department", "category", "tags"],
                         "fuzziness": "AUTO"
                     }
                 },
@@ -90,7 +93,7 @@ class IndexingService:
                 knn=knn,
                 query=keyword_query,
                 size=limit,
-                _source=["documentId", "department", "category", "tags", "extractedData"],
+                _source=["documentId", "title", "fileName", "department", "category", "tags", "extractedData"],
                 highlight={
                     "fields": {
                         "content": {}
@@ -102,5 +105,19 @@ class IndexingService:
             return []
             
         return response['hits']['hits']
+
+    def get_document_content(self, document_id: str, organization_id: str) -> Optional[str]:
+        try:
+            response = self.client.get(
+                index=self.index_name,
+                id=document_id
+            )
+            source = response.get("_source", {})
+            if source.get("organizationId") == organization_id:
+                return source.get("content")
+            return None
+        except Exception as e:
+            print(f"Error fetching document content: {e}")
+            return None
 
 indexing_service = IndexingService()

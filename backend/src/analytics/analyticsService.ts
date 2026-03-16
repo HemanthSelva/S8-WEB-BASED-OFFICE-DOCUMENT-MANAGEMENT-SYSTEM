@@ -5,7 +5,7 @@ import { DocumentStatus, WorkflowStatus, ApprovalActionType } from '@prisma/clie
 const CACHE_TTL = 300; // 5 minutes
 
 export class AnalyticsService {
-    
+
     private async getOrSetCache<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
         if (!redisClient.isOpen) return await fetchFn();
 
@@ -37,10 +37,10 @@ export class AnalyticsService {
             // Uploads trends - last 7 days
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            
+
             const uploads = await prisma.document.groupBy({
                 by: ['createdAt'],
-                where: { 
+                where: {
                     organizationId,
                     createdAt: { gte: sevenDaysAgo }
                 },
@@ -54,11 +54,22 @@ export class AnalyticsService {
                 trendMap[day] = (trendMap[day] || 0) + u._count.id;
             });
 
+            // Documents by category (global)
+            const docsByCategory = await prisma.document.groupBy({
+                by: ['category'],
+                where: { organizationId, status: { not: DocumentStatus.DELETED } },
+                _count: { id: true }
+            });
+
             return {
                 totalDocuments: totalDocs,
                 totalStorageBytes: storageStats._sum.fileSize || 0,
                 averageVersions: totalDocs > 0 ? Number((totalVersions / totalDocs).toFixed(1)) : 0,
-                uploadTrend: trendMap
+                uploadTrend: trendMap,
+                categoryDistribution: docsByCategory.map(c => ({
+                    category: c.category || 'Uncategorized',
+                    count: c._count.id
+                }))
             };
         });
     }
@@ -66,14 +77,14 @@ export class AnalyticsService {
     async getWorkflowMetrics(organizationId: string) {
         return this.getOrSetCache(`analytics:workflows:${organizationId}`, async () => {
             const pendingCount = await prisma.workflowInstance.count({
-                where: { 
+                where: {
                     document: { organizationId },
                     status: WorkflowStatus.PENDING
                 }
             });
 
             const slaBreaches = await prisma.workflowInstance.count({
-                where: { 
+                where: {
                     document: { organizationId },
                     status: WorkflowStatus.ESCALATED
                 }
@@ -106,8 +117,8 @@ export class AnalyticsService {
                 }
             });
 
-            const avgTimeHours = completedWorkflows.length > 0 
-                ? (totalTimeMs / completedWorkflows.length) / (1000 * 60 * 60) 
+            const avgTimeHours = completedWorkflows.length > 0
+                ? (totalTimeMs / completedWorkflows.length) / (1000 * 60 * 60)
                 : 0;
 
             return {
@@ -153,7 +164,7 @@ export class AnalyticsService {
             // Department info is on DocumentMetadata.
             // Simplified: Group documents by department and count actions on them?
             // Or just return upload counts by department.
-            
+
             // Let's do: Document count by department
             // This is actually a document metric but fits "department activity"
             const docsByDept = await prisma.documentMetadata.groupBy({
@@ -161,7 +172,7 @@ export class AnalyticsService {
                 where: { document: { organizationId } },
                 _count: { documentId: true }
             });
-            
+
             const departmentStats = docsByDept.reduce((acc: Record<string, number>, curr) => {
                 if (curr.department) {
                     acc[curr.department] = curr._count.documentId;
@@ -172,11 +183,11 @@ export class AnalyticsService {
             // Daily Active Users (Last 7 days)
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            
+
             // Prisma doesn't support distinct count in groupBy easily for DAU logic in one query.
             // We'll approximate by counting unique actorIds per day from activity logs.
             const logs = await prisma.activityLog.findMany({
-                where: { 
+                where: {
                     organizationId,
                     createdAt: { gte: sevenDaysAgo }
                 },
@@ -211,10 +222,10 @@ export class AnalyticsService {
 
             // Assuming all indexed docs underwent OCR/AI processing
             // In a real system we'd track processing events specifically.
-            
+
             // We can also count specific tags distribution
             // Limitation: Prisma doesn't easily unroll array fields for aggregation (tags).
-            
+
             return {
                 documentsIndexed: indexedDocs,
                 ocrProcessedCount: indexedDocs, // Approximation
@@ -225,21 +236,21 @@ export class AnalyticsService {
     async getBlockchainMetrics(organizationId: string) {
         return this.getOrSetCache(`analytics:blockchain:${organizationId}`, async () => {
             const registeredCount = await prisma.documentVersion.count({
-                where: { 
+                where: {
                     document: { organizationId },
                     blockchainTxHash: { not: null }
                 }
             });
 
             const verifiedDocs = await prisma.document.count({
-                where: { 
+                where: {
                     organizationId,
                     lastVerifiedAt: { not: null }
                 }
             });
 
             const latestActivity = await prisma.documentVersion.findMany({
-                where: { 
+                where: {
                     document: { organizationId },
                     blockchainTxHash: { not: null }
                 },
@@ -257,6 +268,147 @@ export class AnalyticsService {
                     timestamp: v.createdAt
                 }))
             };
+        });
+    }
+
+    async getPersonalMetrics(userId: string, organizationId: string) {
+        return this.getOrSetCache(`analytics:personal:${userId}`, async () => {
+            const myDocs = await prisma.document.count({
+                where: { ownerId: userId, organizationId, status: { not: DocumentStatus.DELETED } }
+            });
+
+            const myPendingWorkflows = await prisma.workflowInstance.count({
+                where: {
+                    document: { organizationId, ownerId: userId },
+                    status: WorkflowStatus.PENDING
+                }
+            });
+
+            // Find documents owned by user
+            const myDocumentIds = await prisma.document.findMany({
+                where: { ownerId: userId, organizationId },
+                select: { id: true }
+            }).then(docs => docs.map(d => d.id));
+
+            // Find workflows for my documents
+            const myInstanceIds = await prisma.workflowInstance.findMany({
+                where: { documentId: { in: myDocumentIds } },
+                select: { id: true }
+            }).then(instances => instances.map(i => i.id));
+
+            // Recent activity for this user and their documents
+            const recentActivityRaw = await prisma.activityLog.findMany({
+                where: {
+                    organizationId,
+                    OR: [
+                        { actorId: userId },
+                        { entityType: 'DOCUMENT', entityId: { in: myDocumentIds } },
+                        { entityType: 'WORKFLOW', entityId: { in: myInstanceIds } }
+                    ]
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+                include: {
+                    actor: { select: { name: true } }
+                }
+            });
+
+            // Enrich with document names for DOCUMENT and WORKFLOW entity types
+            const recentActivity = await Promise.all(recentActivityRaw.map(async (log) => {
+                let documentName = '';
+                if (log.entityType === 'DOCUMENT') {
+                    const doc = await prisma.document.findFirst({
+                        where: { id: log.entityId },
+                        select: { title: true, fileName: true }
+                    });
+                    documentName = doc?.title || doc?.fileName || '';
+                } else if (log.entityType === 'WORKFLOW') {
+                    const instance = await prisma.workflowInstance.findUnique({
+                        where: { id: log.entityId },
+                        include: { document: { select: { title: true, fileName: true } } }
+                    });
+                    documentName = instance?.document?.title || instance?.document?.fileName || '';
+                }
+                return {
+                    action: log.action,
+                    documentName,
+                    timestamp: log.createdAt
+                };
+            }));
+
+            // Documents by category (personal)
+            const docsByCategory = await prisma.document.groupBy({
+                by: ['category'],
+                where: { ownerId: userId, organizationId, status: { not: DocumentStatus.DELETED } },
+                _count: { id: true }
+            });
+
+            return {
+                myDocumentsCount: myDocs,
+                myPendingWorkflows: myPendingWorkflows,
+                recentActivity,
+                categoryDistribution: docsByCategory.map(c => ({
+                    category: c.category || 'Uncategorized',
+                    count: c._count.id
+                }))
+            };
+        });
+    }
+
+    async getGlobalRecentActivity(organizationId: string) {
+        return this.getOrSetCache(`analytics:activity:global:${organizationId}`, async () => {
+            const logs = await prisma.activityLog.findMany({
+                where: { organizationId },
+                orderBy: { createdAt: 'desc' },
+                take: 8,
+                include: {
+                    actor: { select: { name: true } }
+                }
+            });
+
+            // Batch fetch document info for DOCUMENT and WORKFLOW entity types
+            const docLogs = logs.filter(l => l.entityType === 'DOCUMENT');
+            const workflowLogs = logs.filter(l => l.entityType === 'WORKFLOW');
+
+            const docIdsFromDocs = docLogs.map(l => l.entityId);
+
+            // For workflow logs, we need to map instanceId -> documentId
+            const workflowInstances = workflowLogs.length > 0
+                ? await prisma.workflowInstance.findMany({
+                    where: { id: { in: workflowLogs.map(l => l.entityId) } },
+                    select: { id: true, document: { select: { id: true, title: true, fileName: true } } }
+                })
+                : [];
+
+            const instanceMap = new Map(workflowInstances.map(i => [i.id, i.document]));
+            const docIdsFromWorkflows = workflowInstances.map(i => i.document?.id).filter(Boolean);
+
+            const allDocIds = Array.from(new Set([...docIdsFromDocs, ...(docIdsFromWorkflows as string[])]));
+
+            const docs = allDocIds.length > 0
+                ? await prisma.document.findMany({
+                    where: { id: { in: allDocIds } },
+                    select: { id: true, title: true, fileName: true }
+                })
+                : [];
+
+            const docMap = new Map(docs.map(d => [d.id, d]));
+
+            return logs.map(log => {
+                let doc = null;
+                if (log.entityType === 'DOCUMENT') {
+                    doc = docMap.get(log.entityId);
+                } else if (log.entityType === 'WORKFLOW') {
+                    doc = instanceMap.get(log.entityId);
+                }
+
+                return {
+                    action: log.action,
+                    documentName: doc?.title || doc?.fileName || '',
+                    actorName: log.actor?.name || 'System',
+                    timestamp: log.createdAt
+                };
+            });
         });
     }
 }

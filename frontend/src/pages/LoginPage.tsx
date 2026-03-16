@@ -14,7 +14,7 @@ export const LoginPage = () => {
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -24,10 +24,14 @@ export const LoginPage = () => {
     setError('');
 
     try {
+      console.log('Attempting login with:', email);
       const response = await api.post('/auth/login', { email, password });
+      console.log('Login response:', response.data);
       const { accessToken } = response.data;
-      
+
       const decoded: any = jwtDecode(accessToken);
+      console.log('Decoded token:', decoded);
+
       const user = {
         id: decoded.userId,
         email: decoded.email,
@@ -36,11 +40,14 @@ export const LoginPage = () => {
         name: decoded.email.split('@')[0] // Fallback name
       };
 
+      console.log('Dispatching user:', user);
       dispatch(loginSuccess({ token: accessToken, user }));
-      
+
       // Redirect based on role
+      console.log('Navigating to:', `/dashboard/${user.role.toLowerCase()}`);
       navigate(`/dashboard/${user.role.toLowerCase()}`);
     } catch (err: any) {
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);

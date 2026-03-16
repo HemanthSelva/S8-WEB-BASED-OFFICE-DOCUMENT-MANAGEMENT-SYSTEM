@@ -6,11 +6,14 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
-// Apply Global Security: Auth Required
-router.use(requireAuth);
+// Middleware now handled in app.ts
+// router.use(requireAuth);
+// router.use(tenantMiddleware);
 
-// Apply Role Security: Admin Only for analytics
-router.use(requireRole([Role.ADMIN]));
+router.get('/me', analyticsController.getPersonalOverview);
+
+// Apply Role Security: Admin/Manager Only for the rest
+router.use(requireRole([Role.ADMIN, Role.MANAGER]));
 
 router.get('/overview', analyticsController.getOverview);
 router.get('/documents', analyticsController.getDocumentStats);

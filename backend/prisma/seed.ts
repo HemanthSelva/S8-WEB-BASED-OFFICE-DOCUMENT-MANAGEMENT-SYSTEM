@@ -16,7 +16,7 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const commonPassword = 'secure_admin_password';
+  const commonPassword = 'password123';
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(commonPassword, salt);
 
@@ -82,7 +82,7 @@ async function main() {
   console.log('\n-------------------------------------');
   console.log('SEEDING COMPLETE');
   console.log('-------------------------------------');
-  
+
   console.log('\nADMIN LOGIN:');
   console.log('Email: admin@acme.com');
   console.log(`Password: ${commonPassword}`);

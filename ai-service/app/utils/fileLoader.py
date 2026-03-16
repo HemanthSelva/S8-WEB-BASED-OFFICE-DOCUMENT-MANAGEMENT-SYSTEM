@@ -1,7 +1,7 @@
 import os
 import io
 from minio import Minio
-from config import settings
+from app.core.config import settings
 
 class FileLoader:
     def __init__(self):
