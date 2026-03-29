@@ -16,6 +16,7 @@ router.get('/me', analyticsController.getPersonalOverview);
 router.use(requireRole([Role.ADMIN, Role.MANAGER]));
 
 router.get('/overview', analyticsController.getOverview);
+router.get('/dashboard', analyticsController.getOverview); // Alias for dashboard stats
 router.get('/documents', analyticsController.getDocumentStats);
 router.get('/workflows', analyticsController.getWorkflowStats);
 router.get('/users', analyticsController.getUserStats);

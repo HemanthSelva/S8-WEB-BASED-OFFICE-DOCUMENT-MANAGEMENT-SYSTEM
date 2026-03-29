@@ -45,7 +45,7 @@ eventBus.on(EVENTS.DOCUMENT_UPLOADED, async (data) => {
 });
 
 eventBus.on(EVENTS.WORKFLOW_STARTED, async (data) => {
-  const { documentId, userId, organizationId, instanceId, currentStep } = data;
+  const { documentId, userId, organizationId, instanceId, currentStepIndex } = data;
 
   // Log Activity
   await activityService.logActivity(
@@ -60,20 +60,20 @@ eventBus.on(EVENTS.WORKFLOW_STARTED, async (data) => {
   // Notify Approvers based on currentStep
   const instance = await prisma.workflowInstance.findUnique({
     where: { id: instanceId },
-    include: { workflowTemplate: { include: { steps: true } }, document: true }
+    include: { template: { include: { steps: true } }, document: true }
   });
 
   if (instance) {
-    const step = instance.workflowTemplate.steps.find(s => s.stepOrder === currentStep);
+    const step = instance.template.steps.find(s => s.order === currentStepIndex);
     if (step) {
-      const approvers = await findUsersByRole(organizationId, step.roleRequired);
+      const approvers = await findUsersByRole(organizationId, step.requiredRole);
       for (const approver of approvers) {
         await notificationService.createNotification(
           approver.id,
           organizationId,
           NotificationType.WORKFLOW,
           'Action Required: Document Approval',
-          `A new document "${instance.document.title}" requires your approval (${step.roleRequired}).`
+          `A new document "${instance.document.title}" requires your approval (${step.requiredRole}).`
         );
       }
     }

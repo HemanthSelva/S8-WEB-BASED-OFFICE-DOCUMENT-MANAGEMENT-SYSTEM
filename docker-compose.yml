@@ -26,6 +26,9 @@ services:
       - MINIO_BUCKET_NAME=intellidocx-documents
       - AI_SERVICE_URL=http://ai-service:8000
       - AI_SERVICE_API_KEY=intellidocx-ai-secret-key
+      - BLOCKCHAIN_RPC_URL=http://ganache:8545
+      - PRIVATE_KEY=0xf4c88568fb1acfdb09a2f8e4177a304bac829d15fae31c66a61e9ea368cbd83e
+      - CONTRACT_ADDRESS=0xc3c56a7397b9c917fa545c4e6f375d41b24ecdc8
     command: >
       sh -c "npm install &&
              npx prisma generate &&
@@ -60,7 +63,9 @@ services:
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=intellidocx-documents
       - AI_SERVICE_API_KEY=intellidocx-ai-secret-key
+      - GROQ_API_KEY=${GROQ_API_KEY}
     env_file:
+      - .env
       - ./ai-service/.env
     depends_on:
       - elasticsearch

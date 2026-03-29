@@ -75,11 +75,54 @@ class ChatService:
                 "source_found": True
             }
         except Exception as e:
-            print(f"Groq Chat error: {e}")
             return {
                 "answer": f"An error occurred while processing your request: {str(e)}",
                 "confidence": 0.0,
                 "source_found": True
+            }
+
+    async def system_chat(self, organization_id: str, message: str, history: List[Dict] = []) -> Dict[str, Any]:
+        """Queries the general assistant without a specific document context."""
+        if not self.client:
+            return {
+                "answer": "IntelliBot is currently unavailable (API key missing).",
+                "confidence": 0.0,
+                "source_found": False
+            }
+
+        system_prompt = """
+        You are IntelliBot, the intelligent assistant for the IntelliDocX Enterprise Document Management System.
+        Your purpose is to help users navigate the system, understand document management workflows, and answer general questions.
+        You are helpful, concise, and professional. 
+        If asked about documents, guide the user to the 'Search' or 'Documents' tabs.
+        If asked about approvals or workflows, guide them to the 'Workflows' or 'Approvals' tabs.
+        """
+
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        for turn in history[-10:]:
+            messages.append(turn)
+            
+        messages.append({"role": "user", "content": message})
+
+        try:
+            response = self.client.chat.completions.create(
+                messages=messages,
+                model=settings.GROQ_MODEL,
+                temperature=0.6,
+            )
+            
+            return {
+                "answer": response.choices[0].message.content,
+                "confidence": 0.95,
+                "source_found": False
+            }
+        except Exception as e:
+            print(f"Groq System Chat error: {e}")
+            return {
+                "answer": "I'm sorry, I encountered an error while processing your request.",
+                "confidence": 0.0,
+                "source_found": False
             }
 
 chat_service = ChatService()

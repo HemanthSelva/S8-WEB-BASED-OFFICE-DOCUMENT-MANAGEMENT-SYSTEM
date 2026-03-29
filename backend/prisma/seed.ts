@@ -25,23 +25,33 @@ async function main() {
   // Clean up existing data to avoid conflicts
   console.log('Cleaning up existing data...');
   // Delete in order to avoid foreign key constraints
+  await prisma.workflowLog.deleteMany();
+  await prisma.approvalAction.deleteMany();
+  await prisma.workflowInstance.deleteMany();
+  await prisma.documentVersion.deleteMany();
+  await prisma.documentMetadata.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.notification.deleteMany();
-  await prisma.documentVersion.deleteMany();
-  await prisma.documentMetadata.deleteMany();
-  await prisma.workflowInstance.deleteMany();
-  await prisma.document.deleteMany();
   await prisma.workflowStep.deleteMany();
   await prisma.sLAConfig.deleteMany();
   await prisma.workflowTemplate.deleteMany();
+  await prisma.permissionGrant.deleteMany();
+  await prisma.actionApproval.deleteMany();
+  await prisma.userInvitation.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.loginHistory.deleteMany();
+  await prisma.searchHistory.deleteMany();
+  await prisma.savedSearch.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.folder.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
   // Create default Organization
   const org = await prisma.organization.create({
     data: {
-      id: '11111111-1111-1111-1111-111111111111',
+      id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
       name: 'IntelliDocX HQ',
       domain: 'intellidocx.com',
     },
@@ -95,6 +105,27 @@ async function main() {
   console.log('Email: employee@acme.com');
   console.log(`Password: ${commonPassword}`);
   console.log('-------------------------------------\n');
+
+  // Create default Workflow Template for Bug 2 verification
+  console.log('Seeding Workflow Template...');
+  const admin = await prisma.user.findFirst({ where: { role: Role.ADMIN, organizationId: org.id } });
+  if (admin) {
+    await prisma.workflowTemplate.create({
+      data: {
+        name: 'Standard Document Approval',
+        organizationId: org.id,
+        createdBy: admin.id,
+        isActive: true,
+        slaHours: 48,
+        steps: {
+          create: [
+            { order: 1, name: 'Manager Review', requiredRole: Role.MANAGER },
+            { order: 2, name: 'Final Admin Approval', requiredRole: Role.ADMIN, isFinal: true }
+          ]
+        }
+      }
+    });
+  }
 }
 
 main()

@@ -1,12 +1,19 @@
 import { Request, Response } from 'express';
 import * as workflowService from '../services/workflowService';
+import * as auditService from '../services/auditService';
 import { AuthRequest } from '../middleware/auth';
-import { Role } from '@prisma/client';
+import { Role, AuditAction, WorkflowStatus } from '@prisma/client';
+import prisma from '../utils/prisma';
+import { io } from '../app';
 
 export const createTemplate = async (req: AuthRequest, res: Response) => {
   try {
     const { name, steps, slaConfig } = req.body;
     const user = req.user;
+
+    if (user.role !== Role.ADMIN) {
+      return res.status(403).json({ message: 'Unauthorized: Only administrators can create templates' });
+    }
 
     const template = await workflowService.createTemplate(
       name,
@@ -63,19 +70,80 @@ export const performAction = async (req: AuthRequest, res: Response) => {
       user.role,
       user.organizationId
     );
+
+    // Filter events to only emit on definitive progression actions
+    if (['APPROVE', 'REJECT', 'ESCALATE'].includes(action)) {
+      io.to(`org:${user.organizationId}`).emit('workflow:updated', {
+        instanceId,
+        status: result.status,
+        action
+      });
+      
+      if (action === 'ESCALATE') {
+        io.to(`org:${user.organizationId}`).emit('workflow:escalated', {
+          instanceId,
+          documentName: (result as any).document?.title || 'Document'
+        });
+      }
+    }
+
+    // Add Audit Log
+    try {
+      const instance = await prisma.workflowInstance.findUnique({ where: { id: instanceId } });
+      if (instance) {
+        const auditType = action === 'APPROVE' ? AuditAction.WORKFLOW_APPROVE : (action === 'REJECT' ? AuditAction.WORKFLOW_REJECT : null);
+        if (auditType) {
+          await auditService.logAction(
+            auditType,
+            user.userId,
+            user.organizationId,
+            instance.documentId,
+            req.ip
+          );
+        }
+      }
+    } catch (e) {
+      // Ignore non-critical audit failures
+    }
+
     res.json(result);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
 };
 
-export const getPending = async (req: AuthRequest, res: Response) => {
+export const getActiveInstances = async (req: AuthRequest, res: Response) => {
   try {
-    const user = req.user;
-    const pending = await workflowService.getPendingWorkflows(user.organizationId, user.role);
-    res.json(pending);
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
+    const instances = await prisma.workflowInstance.findMany({
+      where: {
+        organizationId: req.user.organizationId,
+        status: WorkflowStatus.PENDING,
+      },
+      include: {
+        document: {
+          include: {
+            metadata: true
+          }
+        },
+        template: {
+          include: {
+            steps: {
+              orderBy: { order: 'asc' }
+            }
+          }
+        },
+        approvalActions: true
+      },
+      orderBy: { startedAt: 'desc' }
+    });
+
+    return res.json({ 
+      success: true, 
+      data: instances.filter(i => i.document !== null)
+    });
+  } catch (error) {
+    console.error('Failed to fetch active workflows:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch active workflows' });
   }
 };
 

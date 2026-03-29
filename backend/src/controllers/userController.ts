@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as userService from '../services/userService';
 import { RegisterUserSchema } from '../utils/validation';
 import { AuthRequest } from '../middleware/auth';
+import { io } from '../app';
 
 /**
  * Create a new user within the admin's organization
@@ -17,6 +18,14 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     }
 
     const user = await userService.createUser(data);
+    
+    // Emit real-time creation event
+    io.to(`org:${data.organizationId}`).emit('user:created', {
+      userId: user.id,
+      name: user.name,
+      role: user.role
+    });
+
     res.status(201).json(user);
   } catch (error: any) {
     if (error.code === 'P2002') {

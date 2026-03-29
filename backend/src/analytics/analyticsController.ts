@@ -32,6 +32,14 @@ export class AnalyticsController {
             ]);
 
             res.json({
+                // Explicitly requested root fields for the Admin Dashboard
+                totalDocuments: docs.totalDocuments,
+                pendingWorkflows: workflows.pendingWorkflows,
+                activeUsersDaily: users.dailyActiveUsers[new Date().toISOString().split('T')[0]] || 0,
+                documentDistribution: docs.categoryDistribution,
+                recentActivity: activities,
+                
+                // Existing sub-objects
                 summary: {
                     totalDocuments: docs.totalDocuments,
                     pendingWorkflows: workflows.pendingWorkflows,
@@ -42,8 +50,7 @@ export class AnalyticsController {
                 workflows,
                 users,
                 ai,
-                blockchain,
-                recentActivity: activities
+                blockchain
             });
         } catch (error: any) {
             console.error('Analytics Error:', error);

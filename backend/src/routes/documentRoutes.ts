@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as documentController from '../controllers/documentController';
+import { getAccessLogs, signDocument, getSignatures } from '../controllers/blockchainController';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/rbac';
 
@@ -75,5 +76,10 @@ router.post('/:id/chat',
   requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
   documentController.chatWithDocument
 );
+
+// Blockain Security Extensions Phase 4
+router.get('/:id/blockchain/access-logs', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']), getAccessLogs);
+router.post('/:id/blockchain/sign', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']), signDocument);
+router.get('/:id/blockchain/signatures', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']), getSignatures);
 
 export default router;

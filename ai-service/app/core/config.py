@@ -30,4 +30,8 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+if not settings.GROQ_API_KEY:
+    print("WARNING: GROQ_API_KEY not set. Chat will be disabled.")
+    
 print("AI Service Config Loaded Successfully")

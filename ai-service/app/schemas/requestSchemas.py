@@ -20,3 +20,19 @@ class ChatRequest(BaseModel):
     organizationId: str
     message: str
     history: Optional[list] = []
+
+class SystemChatRequest(BaseModel):
+    organizationId: str
+    message: str
+    history: Optional[list] = []
+
+class TextAnalysisRequest(BaseModel):
+    documentId: str
+    organizationId: str
+    title: Optional[str] = ""
+    category: str = "General"
+
+class RelationshipRequest(BaseModel):
+    documentId: str
+    organizationId: str
+    limit: int = 5

@@ -12,6 +12,7 @@ export class AIClientService {
       baseURL: AI_SERVICE_URL,
       headers: {
         'X-API-Key': AI_SERVICE_API_KEY,
+        'AI_SERVICE_API_KEY': AI_SERVICE_API_KEY,
         'Content-Type': 'application/json',
       },
     });
@@ -71,6 +72,72 @@ export class AIClientService {
       console.error('AI Chat Error:', error);
       return {
         answer: 'I encountered an error while trying to process your request. Please try again later.',
+        confidence: 0,
+        source_found: false
+      };
+    }
+  }
+
+  async summarize(documentId: string, organizationId: string, title?: string) {
+    try {
+      const response = await this.client.post('/ai/summarize', {
+        documentId, organizationId, title
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI Summarize Error:', error);
+      return { summary: 'Summary unavailable', keyPoints: [], wordCount: 0 };
+    }
+  }
+
+  async checkCompliance(documentId: string, organizationId: string, category: string = 'General') {
+    try {
+      const response = await this.client.post('/ai/compliance', {
+        documentId, organizationId, category
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI Compliance Error:', error);
+      return { riskLevel: 'UNKNOWN', riskScore: 0, findings: [], checkedRules: 0, category };
+    }
+  }
+
+  async detectAi(documentId: string, organizationId: string) {
+    try {
+      const response = await this.client.post('/ai/detect-ai', {
+        documentId, organizationId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI Detect Error:', error);
+      return { isAiGenerated: false, confidence: 0, indicators: [], scores: {} };
+    }
+  }
+
+  async getRelationships(documentId: string, organizationId: string, limit: number = 5) {
+    try {
+      const response = await this.client.post('/ai/relationships', {
+        documentId, organizationId, limit
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI Relationships Error:', error);
+      return { relatedDocuments: [], totalFound: 0 };
+    }
+  }
+
+  async systemChat(organizationId: string, message: string, history: any[] = []) {
+    try {
+      const response = await this.client.post('/chat/system', {
+        organizationId,
+        message,
+        history
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI System Chat Error:', error);
+      return {
+        answer: 'System assistant encountered an error while processing your request.',
         confidence: 0,
         source_found: false
       };

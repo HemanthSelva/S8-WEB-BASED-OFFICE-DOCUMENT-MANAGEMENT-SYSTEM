@@ -24,6 +24,10 @@ model Organization {
   activityLogs ActivityLog[]
   folders      Folder[]
   savedSearches SavedSearch[]
+  invitations   UserInvitation[]
+  approvals     ActionApproval[]
+  permissions   PermissionGrant[]
+  workflowInstances WorkflowInstance[]
 }
 
 enum Role {
@@ -58,6 +62,13 @@ model User {
   savedSearches    SavedSearch[]
   searchHistory    SearchHistory[]
   workflowLogs     WorkflowLog[]    @relation("UserWorkflowLogs")
+  startedWorkflows WorkflowInstance[] @relation("WorkflowStarter")
+  // Phase 1: Admin & Permission relations
+  sentInvitations    UserInvitation[]   @relation("InvitedByUser")
+  requestedApprovals ActionApproval[]   @relation("ApprovalRequester")
+  resolvedApprovals  ActionApproval[]   @relation("ApprovalResolver")
+  permissions        PermissionGrant[]
+  grantedPermissions PermissionGrant[]  @relation("PermissionGranter")
 
   @@index([organizationId])
   @@index([email])
@@ -186,6 +197,8 @@ model WorkflowTemplate {
   steps          WorkflowStep[]
   slaConfig      SLAConfig?
   instances      WorkflowInstance[]
+  isActive       Boolean        @default(true)
+  slaHours       Int            @default(48)
 
   @@unique([name, organizationId])
   @@index([organizationId])
@@ -195,9 +208,9 @@ model WorkflowStep {
   id                 String           @id @default(uuid())
   workflowTemplateId String
   workflowTemplate   WorkflowTemplate @relation(fields: [workflowTemplateId], references: [id], onDelete: Cascade)
-  stepOrder          Int
-  roleRequired       Role
-  stepName           String
+  order              Int
+  requiredRole       Role
+  name               String
   isFinal            Boolean          @default(false)
   condition          String?          // e.g. "metadata.totalAmount > 50000"
 }
@@ -213,18 +226,24 @@ model WorkflowInstance {
   id                 String            @id @default(uuid())
   documentId         String
   document           Document          @relation(fields: [documentId], references: [id])
-  workflowTemplateId String
-  workflowTemplate   WorkflowTemplate  @relation(fields: [workflowTemplateId], references: [id])
-  currentStep        Int               @default(1)
+  templateId         String
+  template           WorkflowTemplate  @relation(fields: [templateId], references: [id])
+  currentStepIndex   Int               @default(0)
   status             WorkflowStatus    @default(PENDING)
   startedAt          DateTime          @default(now())
   completedAt        DateTime?
-  actions            ApprovalAction[]
+  dueDate            DateTime?         // New field for SLA
+  organizationId     String            // Direct org link for efficiency
+  organization       Organization      @relation(fields: [organizationId], references: [id])
+  startedById        String?           // Track who started it
+  startedBy          User?             @relation("WorkflowStarter", fields: [startedById], references: [id])
+  approvalActions    ApprovalAction[]
   logs               WorkflowLog[]
 
   @@index([status])
   @@index([documentId])
-  @@index([workflowTemplateId])
+  @@index([templateId])
+  @@index([organizationId])
 }
 
 enum ApprovalActionType {
@@ -382,4 +401,89 @@ model SearchHistory {
   timestamp DateTime @default(now())
   
   @@index([userId])
+}
+
+// ===== Phase 1: Admin & Permission System =====
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum ApprovalType {
+  DELETE_DOCUMENT
+  DELETE_USER
+  ARCHIVE_DOCUMENT
+  CHANGE_ROLE
+  BULK_DELETE
+}
+
+enum RequestStatus {
+  PENDING_APPROVAL
+  APPROVED_ACTION
+  REJECTED_ACTION
+}
+
+model UserInvitation {
+  id             String           @id @default(uuid())
+  email          String
+  name           String
+  role           Role
+  invitedById    String
+  invitedBy      User             @relation("InvitedByUser", fields: [invitedById], references: [id])
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  status         InvitationStatus @default(PENDING)
+  token          String           @unique
+  expiresAt      DateTime
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([token])
+  @@index([email])
+}
+
+model ActionApproval {
+  id             String        @id @default(uuid())
+  actionType     ApprovalType
+  entityType     EntityType
+  entityId       String
+  requestedById  String
+  requestedBy    User          @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  approvedById   String?
+  approvedBy     User?         @relation("ApprovalResolver", fields: [approvedById], references: [id])
+  status         RequestStatus @default(PENDING_APPROVAL)
+  reason         String?
+  metadata       Json?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime      @default(now())
+  resolvedAt     DateTime?
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([requestedById])
+}
+
+model PermissionGrant {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  documentId     String?
+  folderId       String?
+  canView        Boolean  @default(true)
+  canEdit        Boolean  @default(false)
+  canDelete      Boolean  @default(false)
+  canShare       Boolean  @default(false)
+  canDownload    Boolean  @default(true)
+  grantedById    String
+  grantedBy      User     @relation("PermissionGranter", fields: [grantedById], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([organizationId])
 }

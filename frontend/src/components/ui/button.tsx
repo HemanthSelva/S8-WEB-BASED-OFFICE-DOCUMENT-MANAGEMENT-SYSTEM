@@ -2,6 +2,8 @@ import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
+import { motion, HTMLMotionProps } from "framer-motion"
+import { Loader2 } from "lucide-react"
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
@@ -33,20 +35,46 @@ const buttonVariants = cva(
 )
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onAnimationStart' | 'onDragStart' | 'onDragEnd' | 'onDrag' | 'style'>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  isLoading?: boolean
+  whileHover?: HTMLMotionProps<"button">["whileHover"]
+  whileTap?: HTMLMotionProps<"button">["whileTap"]
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
+  ({ className, variant, size, asChild = false, isLoading, children, whileHover, whileTap, ...props }, ref) => {
+    if (asChild) {
+      return (
+        <Slot
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </Slot>
+      )
+    }
+
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+      <motion.button
+        whileHover={whileHover || { scale: 1.02 }}
+        whileTap={whileTap || { scale: 0.98 }}
+        className={cn(buttonVariants({ variant, size, className }), "relative")}
         ref={ref}
+        disabled={isLoading || props.disabled}
         {...props}
-      />
+      >
+        <span className={cn("flex items-center gap-2", isLoading && "opacity-0")}>
+          {children}
+        </span>
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-4 h-4 animate-spin text-current" />
+          </div>
+        )}
+      </motion.button>
     )
   }
 )

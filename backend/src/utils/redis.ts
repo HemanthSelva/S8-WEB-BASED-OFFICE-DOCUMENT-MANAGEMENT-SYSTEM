@@ -27,8 +27,12 @@ redisClient.on('error', (err) => console.log('Redis Client Error', err));
 
 (async () => {
   if (!redisClient.isOpen) {
-    await redisClient.connect();
-    console.log('Connected to Redis');
+    try {
+      await redisClient.connect();
+      console.log('Connected to Redis');
+    } catch (error) {
+      console.error('Failed to connect to Redis. Running without Redis cache.');
+    }
   }
 })();
 

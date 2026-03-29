@@ -9,12 +9,30 @@ contract DocumentRegistry {
         uint256 version;
     }
 
+    struct AccessLog {
+        string userId;
+        string actionType;
+        uint256 timestamp;
+    }
+
+    struct SignatureData {
+        string signerId;
+        string signatureHash;
+        string role;
+        uint256 timestamp;
+    }
+
     // Mapping from documentId to list of versions
     mapping(string => DocumentData[]) public documentVersions;
+    mapping(string => AccessLog[]) public accessLogs;
+    mapping(string => SignatureData[]) public documentSignatures;
+
     address public owner;
 
     event DocumentRegistered(string indexed documentId, string hash, string uploaderId, uint256 version, uint256 timestamp);
     event DocumentUpdated(string indexed documentId, string hash, string uploaderId, uint256 version, uint256 timestamp);
+    event AccessLogged(string indexed documentId, string userId, string actionType, uint256 timestamp);
+    event DocumentSigned(string indexed documentId, string signerId, string signatureHash, string role, uint256 timestamp);
 
     constructor() {
         owner = msg.sender;
@@ -73,5 +91,34 @@ contract DocumentRegistry {
             }
         }
         return (false, 0);
+    }
+
+    function logAccess(string memory _documentId, string memory _userId, string memory _actionType) public onlyOwner {
+        AccessLog memory newLog = AccessLog({
+            userId: _userId,
+            actionType: _actionType,
+            timestamp: block.timestamp
+        });
+        accessLogs[_documentId].push(newLog);
+        emit AccessLogged(_documentId, _userId, _actionType, block.timestamp);
+    }
+
+    function getAccessLogs(string memory _documentId) public view returns (AccessLog[] memory) {
+        return accessLogs[_documentId];
+    }
+
+    function signDocument(string memory _documentId, string memory _signerId, string memory _signatureHash, string memory _role) public onlyOwner {
+        SignatureData memory newSig = SignatureData({
+            signerId: _signerId,
+            signatureHash: _signatureHash,
+            role: _role,
+            timestamp: block.timestamp
+        });
+        documentSignatures[_documentId].push(newSig);
+        emit DocumentSigned(_documentId, _signerId, _signatureHash, _role, block.timestamp);
+    }
+
+    function getSignatures(string memory _documentId) public view returns (SignatureData[] memory) {
+        return documentSignatures[_documentId];
     }
 }

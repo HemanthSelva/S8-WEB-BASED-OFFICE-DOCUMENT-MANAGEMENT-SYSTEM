@@ -13,8 +13,12 @@ from app.services.embeddingService import embedding_service
 from app.services.classificationService import classification_service
 from app.services.indexingService import indexing_service
 from app.services.chatService import chat_service
-from app.schemas.requestSchemas import DocumentProcessRequest, SearchRequest, ChatRequest
-from app.schemas.responseSchemas import ProcessResponse, SearchResponse, SearchResult, ChatResponse
+from app.services.summaryService import summary_service
+from app.services.complianceService import compliance_service
+from app.services.aiDetectorService import ai_detector_service
+from app.services.relationshipService import relationship_service
+from app.schemas.requestSchemas import DocumentProcessRequest, SearchRequest, ChatRequest, TextAnalysisRequest, RelationshipRequest, SystemChatRequest
+from app.schemas.responseSchemas import ProcessResponse, SearchResponse, SearchResult, ChatResponse, SummaryResponse, ComplianceResponse, RelationshipResponse, AIDetectorResponse
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -160,6 +164,58 @@ async def chat_with_document(request: ChatRequest):
         return ChatResponse(**result)
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/system-chat", response_model=ChatResponse, dependencies=[Depends(get_api_key)])
+async def system_chat(request: SystemChatRequest):
+    try:
+        result = await chat_service.system_chat(
+            request.organizationId,
+            request.message,
+            request.history
+        )
+        return ChatResponse(**result)
+    except Exception as e:
+        print(f"Error in system chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/summarize", response_model=SummaryResponse, dependencies=[Depends(get_api_key)])
+async def summarize_document(request: TextAnalysisRequest):
+    try:
+        text = indexing_service.get_document_content(request.documentId, request.organizationId) or ""
+        result = summary_service.summarize(text, request.title)
+        return SummaryResponse(**result)
+    except Exception as e:
+        print(f"Error in summarize endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/compliance", response_model=ComplianceResponse, dependencies=[Depends(get_api_key)])
+async def check_compliance(request: TextAnalysisRequest):
+    try:
+        text = indexing_service.get_document_content(request.documentId, request.organizationId) or ""
+        result = compliance_service.check_compliance(text, request.category)
+        return ComplianceResponse(**result)
+    except Exception as e:
+        print(f"Error in compliance endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/detect-ai", response_model=AIDetectorResponse, dependencies=[Depends(get_api_key)])
+async def detect_ai_content(request: TextAnalysisRequest):
+    try:
+        text = indexing_service.get_document_content(request.documentId, request.organizationId) or ""
+        result = ai_detector_service.detect(text)
+        return AIDetectorResponse(**result)
+    except Exception as e:
+        print(f"Error in AI detect endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/relationships", response_model=RelationshipResponse, dependencies=[Depends(get_api_key)])
+async def get_relationships(request: RelationshipRequest):
+    try:
+        result = relationship_service.detect_relationships(request.documentId, request.organizationId, request.limit)
+        return RelationshipResponse(**result)
+    except Exception as e:
+        print(f"Error in relationships endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

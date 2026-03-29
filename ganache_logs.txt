@@ -1,0 +1,150 @@
+Ganache CLI v6.12.2 (ganache-core: 2.13.2)
+
+Available Accounts
+==================
+(0) 0x779BeB6561Ae88F6705d723E6766F484eb347E42 (100 ETH)
+(1) 0x6F5E6405c9AD3F792F2Fee638e00C530d93d6F92 (100 ETH)
+(2) 0x3fe34Fb49018AC67f90992BeB208F79e8a7cE41E (100 ETH)
+(3) 0x86EEBF1ff0F0172E4099E58610c69B2954Beb826 (100 ETH)
+(4) 0x3109F96F1755d239ef6B4615683d58eBD1c492ff (100 ETH)
+(5) 0xF54C840cF7D524b80646fB7B3C373ec9deF1c543 (100 ETH)
+(6) 0xBc6f8070617eaAB37BD027a9417fA081FA31Acd4 (100 ETH)
+(7) 0x56451EfEbF1c3254062004172125a13c86DE7CaB (100 ETH)
+(8) 0xf13C6E2aEe65DFeAaa24C2EAc6e6D83D7172d443 (100 ETH)
+(9) 0xb353D8ed1D21933Cc51fBD6d8F2942330138822E (100 ETH)
+
+Private Keys
+==================
+(0) 0xf4c88568fb1acfdb09a2f8e4177a304bac829d15fae31c66a61e9ea368cbd83e
+(1) 0x67ec60dea8e306fd56b99160664b316e91b83bbb4a1235300a20130e327360e0
+(2) 0x133a995519adbbe281608d95d51dba06786f4a0ded10cd1fd8ab37d3fc24621d
+(3) 0x8dccf74d3957d5f37095e8e658c6abf9bf6ba8bdc58b20f416f5b5bd8153a5c2
+(4) 0x752febe02ddf7a6bffda4a04a2d6f952ea16e4696b968de26478266843a92e4f
+(5) 0x67c7a34dca977f5d627a979423089df62dd5b21b2666b91deb00f9db5f7f6bfc
+(6) 0xec51404324d22c0e3e3bc18453eb37be949261e28deb5eacc1fcd26808c5bb0a
+(7) 0xee28501bed557396ed881457734f8d49394af29446ef75af9cb78a062befd891
+(8) 0x6b0017275b2f9d3b740891dfd4001fa8a082e8f3e5498d68aa61e38967aacb63
+(9) 0x179cae521196116ad3c4b2ba1e13fc22890cd00e8f482278ddd1c5b846dd856b
+
+HD Wallet
+==================
+Mnemonic:      bacon control among vicious pull buffalo half believe firm mobile hover flavor
+Base HD Path:  m/44'/60'/0'/0/{account_index}
+
+Gas Price
+==================
+20000000000
+
+Gas Limit
+==================
+6721975
+
+Call Gas Limit
+==================
+9007199254740991
+
+Listening on 0.0.0.0:8545
+eth_chainId
+eth_accounts
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+eth_blockNumber
+eth_estimateGas
+eth_getBlockByNumber
+eth_gasPrice
+eth_sendTransaction
+
+  Transaction: 0xd5e7df0cd7bced517d2517495996dbd5fcda5ae3cd93b39094aa12c017f47b62
+  Contract created: 0xa7e900f9ddb693e7b406b895ad84c07e5a8288af
+  Gas usage: 2383678
+  Block Number: 1
+  Block Time: Wed Mar 25 2026 19:48:10 GMT+0000 (Coordinated Universal Time)
+
+eth_getTransactionByHash
+eth_getTransactionReceipt
+eth_chainId
+eth_accounts
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+eth_blockNumber
+eth_estimateGas
+eth_getBlockByNumber
+eth_gasPrice
+eth_sendTransaction
+
+  Transaction: 0xbf7725cc09c8f6919ea02e97541a2ff025d49ffce96527d96159c8680089c0f4
+  Contract created: 0xe32eaf557e9f2f2d7bf9904a2ae5fa6d22a966ef
+  Gas usage: 2383678
+  Block Number: 2
+  Block Time: Wed Mar 25 2026 19:48:50 GMT+0000 (Coordinated Universal Time)
+
+eth_getTransactionByHash
+eth_getTransactionReceipt
+eth_chainId
+eth_accounts
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+eth_blockNumber
+eth_estimateGas
+eth_getBlockByNumber
+eth_gasPrice
+eth_sendTransaction
+
+  Transaction: 0xbfe8ccaafad712416f60f22e0312645e0f81ac5080b997ec9ca1fa23c2cd7602
+  Contract created: 0x74915251d681c0d2f8d8bae0878830bbae04708a
+  Gas usage: 2383678
+  Block Number: 3
+  Block Time: Wed Mar 25 2026 19:50:56 GMT+0000 (Coordinated Universal Time)
+
+eth_getTransactionByHash
+eth_getTransactionReceipt
+eth_chainId
+eth_accounts
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+hardhat_metadata
+eth_blockNumber
+eth_estimateGas
+eth_getBlockByNumber
+eth_gasPrice
+eth_sendTransaction
+
+  Transaction: 0xf3ff0759381771f57765da96de04fb3b90935081d2e9f5ae04a4c5f4d165e50f
+  Contract created: 0xc3c56a7397b9c917fa545c4e6f375d41b24ecdc8
+  Gas usage: 2383678
+  Block Number: 4
+  Block Time: Wed Mar 25 2026 19:53:12 GMT+0000 (Coordinated Universal Time)
+
+eth_getTransactionByHash
+eth_getTransactionReceipt

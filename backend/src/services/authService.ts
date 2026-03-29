@@ -65,7 +65,7 @@ export const login = async (email: string, password: string, ipAddress: string, 
     }
   });
 
-  return { user: { id: user.id, name: user.name, email: user.email, role: user.role }, accessToken, refreshToken: refreshTokenString };
+  return { user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId }, accessToken, refreshToken: refreshTokenString };
 };
 
 export const refresh = async (token: string, ipAddress: string) => {

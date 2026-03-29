@@ -27,9 +27,9 @@ router.post('/action/:instanceId',
   workflowController.performAction
 );
 
-router.get('/pending', 
+router.get('/active', 
   requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']), 
-  workflowController.getPending
+  workflowController.getActiveInstances
 );
 
 router.get('/history/:documentId', 

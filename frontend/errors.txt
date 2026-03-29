@@ -1,0 +1,10 @@
+﻿src/components/admin/UserManagement.tsx(16,10): error TS6133: 'loading' is declared but its value is never read.
+src/components/chat/IntelliBot.tsx(3,25): error TS6133: 'Loader2' is declared but its value is never read.
+src/components/chat/IntelliBot.tsx(10,16): error TS6133: 'TabsContent' is declared but its value is never read.
+src/components/documents/BlockchainSecurityModal.tsx(5,99): error TS6133: 'Download' is declared but its value is never read.
+src/components/layout/Header.tsx(58,31): error TS6133: 'data' is declared but its value is never read.
+src/pages/DocumentsPage.tsx(4,1): error TS6192: All imports in import declaration are unused.
+src/pages/DocumentsPage.tsx(5,10): error TS6133: 'CheckCircle' is declared but its value is never read.
+src/pages/DocumentsPage.tsx(5,23): error TS6133: 'AlertTriangle' is declared but its value is never read.
+src/pages/DocumentsPage.tsx(7,1): error TS6133: 'format' is declared but its value is never read.
+src/pages/DocumentsPage.tsx(20,10): error TS6133: 'currentQuery' is declared but its value is never read.

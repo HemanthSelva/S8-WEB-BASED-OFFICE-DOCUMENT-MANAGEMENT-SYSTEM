@@ -9,6 +9,7 @@ async function main() {
   console.log(
     `DocumentRegistry deployed to ${documentRegistry.target}`
   );
+  require('fs').writeFileSync('deployed_address.txt', documentRegistry.target);
 }
 
 main().catch((error) => {

@@ -90,14 +90,20 @@ export const DocumentChat: React.FC<DocumentChatProps> = ({
     };
 
     return (
-        <Card className="fixed bottom-4 right-4 w-[400px] h-[600px] shadow-2xl flex flex-col z-50 border-primary/20 animate-in slide-in-from-right-10 duration-300">
-            <CardHeader className="bg-primary text-primary-foreground p-4 flex flex-row items-center justify-between rounded-t-lg">
-                <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-                    <CardTitle className="text-sm font-bold truncate max-w-[250px]">
-                        AI Assistant: {documentTitle}
-                    </CardTitle>
-                </div>
+        <>
+            <div 
+                className="fixed inset-0 bg-slate-900/20 dark:bg-slate-950/40 backdrop-blur-sm z-[100]"
+                onClick={onClose}
+            />
+            <Card className="fixed top-0 right-0 w-full sm:w-[500px] h-full shadow-2xl flex flex-col z-[110] border-l border-white/10 rounded-none animate-in slide-in-from-right duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] bg-white/80 dark:bg-slate-950/80 backdrop-blur-2xl">
+                <CardHeader className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex flex-row items-center justify-between rounded-none shrink-0" style={{ margin: 0 }}>
+                    <div className="flex items-center gap-3">
+                        <Sparkles className="w-6 h-6 text-yellow-300 fill-yellow-300" />
+                        <div>
+                            <CardTitle className="text-lg font-bold">IntelliBot Analysis</CardTitle>
+                            <p className="text-white/80 text-xs font-medium truncate max-w-[280px]">Chatting about: {documentTitle}</p>
+                        </div>
+                    </div>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -154,23 +160,24 @@ export const DocumentChat: React.FC<DocumentChatProps> = ({
             <CardFooter className="p-4 border-t bg-muted/20">
                 <div className="flex w-full gap-2">
                     <Input
-                        placeholder="Ask about this document..."
+                        placeholder="Ask IntelliBot a specific question about this document..."
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                         disabled={isLoading}
-                        className="flex-1 focus-visible:ring-primary/30"
+                        className="flex-1 h-12 rounded-xl focus-visible:ring-indigo-500 bg-white dark:bg-slate-900 shadow-inner"
                     />
                     <Button
                         size="icon"
                         onClick={handleSend}
                         disabled={isLoading || !input.trim()}
-                        className="hover:scale-105 transition-transform"
+                        className="h-12 w-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 hover:scale-105 transition-transform shrink-0 shadow-lg shadow-indigo-500/20"
                     >
                         <Send className="h-4 w-4" />
                     </Button>
                 </div>
             </CardFooter>
         </Card>
+        </>
     );
 };

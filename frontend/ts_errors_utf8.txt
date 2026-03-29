@@ -1,0 +1,5 @@
+src/components/documents/DocumentCard.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/documents/DocumentCard.tsx(2,18): error TS6133: 'AnimatePresence' is declared but its value is never read.
+src/components/documents/DocumentGrid.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/documents/DocumentList.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/documents/DocumentList.tsx(60,36): error TS6133: 'i' is declared but its value is never read.

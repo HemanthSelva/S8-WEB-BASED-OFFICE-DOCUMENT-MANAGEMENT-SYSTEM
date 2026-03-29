@@ -9,6 +9,7 @@ const connection = {
 };
 
 export const documentQueue = new Queue('document-processing', { connection });
+documentQueue.on('error', (err) => console.log('Queue Error (Gracefully handled):', err.message));
 
 export const addDocumentJob = async (documentId: string, filePath: string, organizationId: string, title?: string, fileName?: string) => {
   await documentQueue.add('process-document', {

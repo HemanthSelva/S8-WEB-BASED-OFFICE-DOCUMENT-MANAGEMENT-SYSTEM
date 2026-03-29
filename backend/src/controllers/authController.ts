@@ -1,22 +1,52 @@
 import { Request, Response } from 'express';
 import * as authService from '../services/authService';
+import * as auditService from '../services/auditService';
 import { LoginSchema } from '../utils/validation';
+import { AuditAction } from '@prisma/client';
+import prisma from '../utils/prisma';
 
 /**
  * Login user and issue tokens
  * @route POST /auth/login
  */
 export const login = async (req: Request, res: Response) => {
+  const data = LoginSchema.parse(req.body);
+  const ip = req.ip || 'unknown';
   try {
-    const data = LoginSchema.parse(req.body);
     console.log(`[LOGIN ATTEMPT] Email: ${data.email}`);
-    const ip = req.ip || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
     const result = await authService.login(data.email, data.password, ip, userAgent);
     console.log(`[LOGIN SUCCESS] User: ${data.email}`);
+    
+    // Audit log
+    await auditService.logAction(
+      AuditAction.LOGIN,
+      result.user.id,
+      result.user.organizationId,
+      undefined,
+      req.ip
+    );
+
     res.json(result);
   } catch (error: any) {
     console.error(`[LOGIN FAILED] Error: ${error.message}`);
+    
+    // Attempt to log failed login if the user actually exists
+    try {
+        const user = await prisma.user.findUnique({ where: { email: data.email } });
+        if (user) {
+            await auditService.logAction(
+                AuditAction.FAILED_LOGIN,
+                user.id,
+                user.organizationId,
+                undefined,
+                req.ip
+            );
+        }
+    } catch (e) {
+        // Ignore errors during failed login audit attempt
+    }
+
     res.status(401).json({ message: error.message });
   }
 };

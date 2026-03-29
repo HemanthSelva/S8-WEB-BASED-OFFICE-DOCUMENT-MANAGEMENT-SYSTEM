@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "D:\\final__\\IntelliDocX\\blockchain\\contracts\\DocumentRegistry.sol": {
-      "lastModificationDate": 1770641808727,
-      "contentHash": "1e0c42ee2e7def55d0de45196c5b54bf",
+    "D:\\Desktop\\IntelliDocX\\blockchain\\contracts\\DocumentRegistry.sol": {
+      "lastModificationDate": 1774468001813,
+      "contentHash": "150d68ae915c5342f9766636cb2d8655",
       "sourceName": "contracts/DocumentRegistry.sol",
       "solcConfig": {
         "version": "0.8.19",

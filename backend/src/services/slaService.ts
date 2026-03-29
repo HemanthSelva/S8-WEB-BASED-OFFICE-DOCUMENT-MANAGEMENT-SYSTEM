@@ -7,7 +7,7 @@ export const checkSLABreaches = async () => {
   const pendingWorkflows = await prisma.workflowInstance.findMany({
     where: { status: WorkflowStatus.PENDING },
     include: {
-      workflowTemplate: {
+      template: {
         include: { slaConfig: true },
       },
       document: true,
@@ -15,9 +15,9 @@ export const checkSLABreaches = async () => {
   });
 
   for (const workflow of pendingWorkflows) {
-    if (!workflow.workflowTemplate.slaConfig) continue;
+    if (!workflow.template.slaConfig) continue;
 
-    const { maxApprovalHours, escalationRole } = workflow.workflowTemplate.slaConfig;
+    const { maxApprovalHours, escalationRole } = workflow.template.slaConfig;
     const hoursElapsed = (Date.now() - workflow.startedAt.getTime()) / (1000 * 60 * 60);
 
     if (hoursElapsed > maxApprovalHours) {

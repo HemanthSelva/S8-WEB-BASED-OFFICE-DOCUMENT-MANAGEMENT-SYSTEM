@@ -6,7 +6,7 @@ export const createTemplate = async (
   name: string,
   organizationId: string,
   createdBy: string,
-  steps: { stepOrder: number; roleRequired: Role; stepName: string; isFinal?: boolean; condition?: string }[],
+  steps: { order: number; requiredRole: Role; name: string; isFinal?: boolean; condition?: string }[],
   slaConfig?: { maxApprovalHours: number; escalationRole: Role }
 ) => {
   return await prisma.workflowTemplate.create({
@@ -16,9 +16,9 @@ export const createTemplate = async (
       createdBy,
       steps: {
         create: steps.map((s) => ({
-          stepOrder: s.stepOrder,
-          roleRequired: s.roleRequired,
-          stepName: s.stepName,
+          order: s.order,
+          requiredRole: s.requiredRole,
+          name: s.name,
           isFinal: s.isFinal || false,
           condition: s.condition
         })),
@@ -42,7 +42,7 @@ export const createTemplate = async (
 export const getTemplates = async (organizationId: string) => {
   return await prisma.workflowTemplate.findMany({
     where: { organizationId },
-    include: { steps: true, slaConfig: true },
+    include: { steps: { orderBy: { order: 'asc' } }, slaConfig: true },
   });
 };
 
@@ -57,13 +57,13 @@ import { eventBus, EVENTS } from '../events/eventBus';
 
 export const startWorkflow = async (
   documentId: string,
-  workflowTemplateId: string,
+  templateId: string,
   userId: string,
   organizationId: string
 ) => {
   const template = await prisma.workflowTemplate.findUnique({
-    where: { id: workflowTemplateId },
-    include: { steps: { orderBy: { stepOrder: 'asc' } } }
+    where: { id: templateId },
+    include: { steps: { orderBy: { order: 'asc' } } }
   });
 
   if (!template) throw new Error('Template not found');
@@ -76,9 +76,9 @@ export const startWorkflow = async (
   if (uploader.role === Role.MANAGER) {
     // If manager uploads, skip manager step (usually step 1) and go to admin (step 2)
     // We look for the first step that requires ADMIN role
-    const adminStep = template.steps.find(s => s.roleRequired === Role.ADMIN);
+    const adminStep = template.steps.find(s => s.requiredRole === Role.ADMIN);
     if (adminStep) {
-      initialStep = adminStep.stepOrder;
+      initialStep = adminStep.order;
     }
   }
 
@@ -86,13 +86,14 @@ export const startWorkflow = async (
     const inst = await tx.workflowInstance.create({
       data: {
         documentId,
-        workflowTemplateId,
-        currentStep: initialStep,
+        templateId,
+        organizationId,
+        currentStepIndex: initialStep,
         status: WorkflowStatus.PENDING,
         startedAt: new Date()
       },
       include: {
-        workflowTemplate: { include: { steps: true } }
+        template: { include: { steps: true } }
       }
     });
 
@@ -121,7 +122,7 @@ export const startWorkflow = async (
     userId,
     organizationId,
     instanceId: instance.id,
-    currentStep: initialStep
+    currentStepIndex: initialStep
   });
 
   return instance;
@@ -142,7 +143,7 @@ export const processAction = async (
     const instance = await tx.workflowInstance.findUnique({
       where: { id: instanceId },
       include: {
-        workflowTemplate: { include: { steps: true } },
+        template: { include: { steps: true } },
         document: { select: { ownerId: true, title: true } }
       },
     });
@@ -150,15 +151,42 @@ export const processAction = async (
     if (!instance) throw new Error('Workflow instance not found');
     if (instance.status !== WorkflowStatus.PENDING) throw new Error('Workflow is not in PENDING state');
 
-    const currentStep = instance.workflowTemplate.steps.find(
-      (s) => s.stepOrder === instance.currentStep
+    const currentStep = instance.template.steps.find(
+      (s) => s.order === instance.currentStepIndex
     );
 
     if (!currentStep) throw new Error('Current step not found');
 
     // Role Validation
-    if (currentStep.roleRequired !== role) {
-      throw new Error(`Unauthorized: Only ${currentStep.roleRequired} can perform this action`);
+    if (currentStep.requiredRole !== role) {
+      throw new Error(`Unauthorized: Only ${currentStep.requiredRole} can perform this action`);
+    }
+
+    if ((action as string) === 'ESCALATE') {
+      const updatedInstance = await tx.workflowInstance.update({
+        where: { id: instanceId },
+        data: {
+          status: (WorkflowStatus as any).ESCALATED || 'ESCALATED',
+        },
+      });
+
+      await tx.workflowLog.create({
+        data: {
+          workflowInstanceId: instanceId,
+          action: 'ESCALATED',
+          performedById: userId,
+          comment: comments || 'Workflow escalated to administrator'
+        }
+      });
+
+      eventBus.emit('workflow:escalated', {
+        instanceId,
+        documentId: instance.documentId,
+        organizationId,
+        performedBy: userId
+      });
+
+      return updatedInstance;
     }
 
     if (action === ApprovalActionType.REJECT) {
@@ -167,7 +195,7 @@ export const processAction = async (
         data: {
           status: WorkflowStatus.REJECTED,
           completedAt: new Date(),
-          actions: {
+          approvalActions: {
             create: {
               stepId: currentStep.id,
               action: ApprovalActionType.REJECT,
@@ -201,8 +229,8 @@ export const processAction = async (
     }
 
     // Handle Approval
-    let nextStepOrder = instance.currentStep + 1;
-    let nextStep = instance.workflowTemplate.steps.find(s => s.stepOrder === nextStepOrder);
+    let nextStepOrder = instance.currentStepIndex + 1;
+    let nextStep = instance.template.steps.find(s => s.order === nextStepOrder);
 
     // Skip steps if condition exists (omitted for brevity, keeping original logic if needed)
     // For role-based flow, we assume sequential steps for now.
@@ -214,7 +242,7 @@ export const processAction = async (
         data: {
           status: WorkflowStatus.APPROVED,
           completedAt: new Date(),
-          actions: {
+          approvalActions: {
             create: {
               stepId: currentStep.id,
               action: ApprovalActionType.APPROVE,
@@ -251,8 +279,8 @@ export const processAction = async (
       const updatedInstance = await tx.workflowInstance.update({
         where: { id: instanceId },
         data: {
-          currentStep: nextStep.stepOrder,
-          actions: {
+          currentStepIndex: nextStep.order,
+          approvalActions: {
             create: {
               stepId: currentStep.id,
               action: ApprovalActionType.APPROVE,
@@ -277,8 +305,8 @@ export const processAction = async (
         userId,
         organizationId,
         instanceId,
-        nextStep: nextStep.stepOrder,
-        nextRole: nextStep.roleRequired,
+        nextStep: nextStep.order,
+        nextRole: nextStep.requiredRole,
         ownerId: instance.document.ownerId
       });
 
@@ -299,27 +327,33 @@ export const getPendingWorkflows = async (organizationId: string, role: Role) =>
   const workflows = await prisma.workflowInstance.findMany({
     where: {
       status: WorkflowStatus.PENDING,
-      document: { organizationId },
-      workflowTemplate: {
+      document: { 
+        organizationId,
+        status: { not: 'DELETED' } // Filter out orphaned instances of deleted documents
+      },
+      template: {
         steps: {
           some: {
-            roleRequired: role
-            // We need to match stepOrder == currentStep. 
-            // Prisma 'some' matches if ANY step matches. This is insufficient.
+            requiredRole: role
           }
         }
       }
     },
     include: {
-      workflowTemplate: { include: { steps: true } },
-      document: { select: { id: true, title: true } }
+      template: { include: { steps: true, slaConfig: true } },
+      document: { 
+        include: {
+          owner: { select: { id: true, name: true, email: true } },
+          metadata: true
+        }
+      }
     }
   });
 
   // Client-side filter for precise step matching
   return workflows.filter(w => {
-    const step = w.workflowTemplate.steps.find(s => s.stepOrder === w.currentStep);
-    return step && step.roleRequired === role;
+    const step = w.template.steps.find(s => s.order === w.currentStepIndex);
+    return step && step.requiredRole === role;
   });
 };
 
@@ -327,8 +361,8 @@ export const getWorkflowHistory = async (documentId: string) => {
   return await prisma.workflowInstance.findMany({
     where: { documentId },
     include: {
-      actions: { orderBy: { performedAt: 'desc' } },
-      workflowTemplate: true
+      approvalActions: { orderBy: { performedAt: 'desc' } },
+      template: true
     },
     orderBy: { startedAt: 'desc' }
   });

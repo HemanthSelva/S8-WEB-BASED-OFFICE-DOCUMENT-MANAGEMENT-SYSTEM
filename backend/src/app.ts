@@ -15,6 +15,8 @@ import notificationRoutes from './routes/notificationRoutes';
 import analyticsRoutes from './analytics/analyticsRoutes';
 import searchRoutes from './routes/searchRoutes';
 import folderRoutes from './routes/folderRoutes';
+import adminRoutes from './routes/adminRoutes';
+import chatRoutes from './routes/chatRoutes';
 import prisma from './utils/prisma';
 import redisClient from './utils/redis';
 import { v4 as uuidv4 } from 'uuid';
@@ -139,7 +141,12 @@ app.use('/api/workflows', protectedMiddleware, workflowRoutes);
 app.use('/api/search', protectedMiddleware, searchRoutes);
 app.use('/api/folders', protectedMiddleware, folderRoutes);
 app.use('/api/analytics', protectedMiddleware, analyticsRoutes);
+app.use('/api/chat', protectedMiddleware, chatRoutes);
+app.use('/api/admin', adminRoutes); // Has its own auth middleware (accept-invitation is public)
 app.use('/api', protectedMiddleware, notificationRoutes);
+
+import auditRoutes from './routes/auditRoutes';
+app.use('/api/audit-logs', protectedMiddleware, auditRoutes);
 
 // Initialize MinIO Bucket
 ensureBucketExists();

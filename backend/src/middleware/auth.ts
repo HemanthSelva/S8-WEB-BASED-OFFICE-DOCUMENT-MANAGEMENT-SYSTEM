@@ -4,6 +4,7 @@ import redisClient from '../utils/redis';
 
 export interface AuthRequest extends Request {
   user?: any;
+  file?: any;
 }
 
 export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -4,11 +4,14 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
-
+import { IntelliBot } from '@/components/chat/IntelliBot';
 import { socketService } from '@/api/socketService';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 
 export const DashboardLayout = () => {
   const { isAuthenticated, token } = useSelector((state: RootState) => state.auth);
+  const location = useLocation();
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -28,9 +31,28 @@ export const DashboardLayout = () => {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+        <main className="flex-1 overflow-hidden relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="h-full w-full overflow-auto p-6"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
+      </div>
+      <div style={{
+        position: 'fixed',
+        bottom: '24px', 
+        right: '24px',
+        zIndex: 9999
+      }}>
+        <IntelliBot />
       </div>
     </div>
   );

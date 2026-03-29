@@ -9,10 +9,11 @@ import { uploadFileStream, getFileStream, BUCKET_NAME } from '../storage/minioCl
 import { calculateFileHash } from '../utils/hash';
 import { validateFile } from '../utils/fileValidation';
 import { AuthRequest } from '../middleware/auth';
-import { AuditAction } from '@prisma/client';
+import { AuditAction, WorkflowStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../utils/prisma';
 import { addDocumentJob } from '../services/queueService';
+import { io } from '../app';
 
 export const uploadDocument = async (req: AuthRequest, res: Response) => {
   try {
@@ -80,7 +81,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
       description,
       fileName: file.originalname,
       mimeType: file.mimetype,
-      fileSize: file.size,
+      fileSize: file.size || file.buffer.length, // Ensure actual size is captured
       ownerId: user.userId,
       organizationId: user.organizationId,
       extractedText: extractedText || undefined,
@@ -95,6 +96,40 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
         category: category || classification.category, // Use auto-classified if not provided
         tags: tags ? (Array.isArray(tags) ? tags : [tags]) : [],
       });
+    }
+
+    // BUG 2 — Auto-trigger Workflow (Step 3) - COMPLETELY UPDATED
+    try {
+      // Find active workflow template for this org
+      const template = await prisma.workflowTemplate.findFirst({
+        where: { 
+          organizationId: user.organizationId,
+          isActive: true 
+        },
+        include: { 
+          steps: { orderBy: { order: 'asc' } },
+          slaConfig: true
+        }
+      });
+      
+      if (template) {
+        const slaHours = template.slaConfig?.maxApprovalHours || template.slaHours || 48;
+        await prisma.workflowInstance.create({
+          data: {
+            documentId: doc.id,
+            templateId: template.id,
+            organizationId: user.organizationId,
+            status: WorkflowStatus.PENDING,
+            currentStepIndex: 0,
+            startedById: user.userId,
+            dueDate: new Date(Date.now() + slaHours * 60 * 60 * 1000)
+          }
+        });
+        console.log('[Workflow] Auto-triggered for document:', doc.id);
+      }
+    } catch (workflowError) {
+      console.error('[Workflow] Trigger failed:', workflowError);
+      // Don't fail the upload if workflow trigger fails
     }
 
     // Note: Automatic Workflow Trigger will be moved to after AI processing in the worker 
@@ -125,6 +160,13 @@ export const uploadDocument = async (req: AuthRequest, res: Response) => {
       console.error('Failed to add document to queue', e);
       // Don't fail the upload if queue fails, but maybe log it
     }
+
+    // Emit Real-Time Event
+    io.to(`org:${user.organizationId}`).emit('document:uploaded', {
+      documentId: doc.id,
+      name: doc.title,
+      uploadedBy: user.name || user.email || 'Unknown User'
+    });
 
     res.status(201).json({ ...doc, fileHash, blockchainTx: version.blockchainTxHash });
   } catch (error: any) {
@@ -168,7 +210,29 @@ export const searchDocuments = async (req: AuthRequest, res: Response) => {
     const searchResults = await aiClientService.search(q, user.organizationId, filters);
 
     if (!searchResults || searchResults.length === 0) {
-      return res.json([]);
+      // Fallback: Keyword Search via Prisma
+      const keywordDocs = await prisma.document.findMany({
+        where: {
+          organizationId: user.organizationId,
+          status: { not: 'DELETED' },
+          OR: [
+            { title: { contains: q as string, mode: 'insensitive' } },
+            { fileName: { contains: q as string, mode: 'insensitive' } },
+            { category: { contains: q as string, mode: 'insensitive' } }
+          ]
+        },
+        include: {
+          owner: { select: { id: true, name: true } },
+          metadata: true
+        },
+        take: 20
+      });
+
+      return res.json(keywordDocs.map(d => ({
+        ...d,
+        score: 1.0, // Default score for keyword matches
+        isKeywordMatch: true
+      })));
     }
 
     const docIds = searchResults.map((r: any) => r.documentId);
@@ -313,27 +377,84 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
     if (!doc) return res.status(404).json({ message: 'Document not found' });
 
     // RBAC + Ownership Check:
-    // Employees can only delete their own documents
+    // Employees can only request deletion of their own documents
     if (user.role === 'EMPLOYEE' && doc.ownerId !== user.userId) {
       return res.status(403).json({ message: 'Forbidden: You can only delete your own documents' });
     }
 
-    await documentService.deleteDocument(id);
+    // Admins and Managers can delete directly, others go through approval
+    if (user.role === 'ADMIN' || user.role === 'MANAGER') {
+      // 1. Delete from MinIO first if storage path is available
+      try {
+        const latestVersion = await prisma.documentVersion.findFirst({
+          where: { documentId: id },
+          orderBy: { versionNumber: 'desc' }
+        });
+        
+        if (latestVersion?.storagePath) {
+          const { deleteFile } = await import('../storage/minioClient');
+          // Perform delete with try-catch to ensure DB purge continues even if MinIO fails
+          try {
+            await deleteFile(latestVersion.storagePath);
+            console.log(`[Delete] File ${latestVersion.storagePath} removed from MinIO`);
+          } catch (storageErr: any) {
+            console.warn(`[Delete] MinIO file deletion failed: ${storageErr.message}. Proceeding with database purge.`);
+          }
+        }
+      } catch (minioErr: any) {
+        console.error('[Delete] Storage version lookup failed:', minioErr);
+        // Continue with DB delete even if lookup fails
+      }
 
-    // Audit Log
-    await auditService.logAction(
-      AuditAction.DELETE,
-      user.userId,
-      user.organizationId,
-      doc.id,
-      req.ip
-    );
+      // 2. Delete from DB (Hard delete as requested by user: "deleted from MinIO AND PostgreSQL")
+      // Note: Relation constraints might require multi-step delete or CASCADE.
+      // We'll perform a soft delete first then hard delete if needed, 
+      // but the user's prompt "both must be deleted" implies hard delete.
+      await prisma.$transaction([
+        prisma.documentMetadata.deleteMany({ where: { documentId: id } }),
+        prisma.documentVersion.deleteMany({ where: { documentId: id } }),
+        prisma.document.delete({ where: { id } })
+      ]);
 
-    res.status(204).send();
+      // Audit Log
+      await auditService.logAction(
+        AuditAction.DELETE,
+        user.userId,
+        user.organizationId,
+        id,
+        req.ip
+      );
+
+      // Emit Real-Time Event
+      io.to(`org:${user.organizationId}`).emit('document:deleted', {
+        documentId: id
+      });
+
+      return res.status(204).send();
+    }
+
+    // Non-admin users: create approval request
+    const { requestApproval } = await import('../services/approvalService');
+    const approval = await requestApproval({
+      actionType: 'DELETE_DOCUMENT',
+      entityType: 'DOCUMENT',
+      entityId: id,
+      requestedById: user.userId,
+      organizationId: user.organizationId,
+      reason: req.body.reason || 'Document deletion requested',
+      metadata: { documentTitle: doc.title, fileName: doc.fileName },
+    });
+
+    res.status(202).json({ 
+      message: 'Deletion request submitted for approval',
+      approvalId: approval.id,
+      status: 'PENDING_APPROVAL'
+    });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const downloadDocument = async (req: AuthRequest, res: Response) => {
   try {
@@ -371,6 +492,12 @@ export const downloadDocument = async (req: AuthRequest, res: Response) => {
         doc.id,
         req.ip
       );
+      
+      // Phase 4: Blockchain Access Logging
+      await blockchainService.logDocumentAccess(doc.id, user.userId, 'DOWNLOAD');
+    } else {
+      // Log view access on blockchain too
+      await blockchainService.logDocumentAccess(doc.id, user.userId, 'VIEW');
     }
   } catch (error: any) {
     console.error('Download error:', error);
@@ -428,7 +555,8 @@ export const verifyDocument = async (req: AuthRequest, res: Response) => {
       blockchainVersion: verification.version,
       storedHash: storedHash,
       lastVerifiedAt: new Date(),
-      txHash: currentVersion.blockchainTxHash
+      txHash: currentVersion.blockchainTxHash,
+      blockchainAvailable: blockchainService.isAvailable()
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

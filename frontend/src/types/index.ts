@@ -24,6 +24,15 @@ export interface Document {
   category?: string;
   confidence?: number;
   extractedText?: string;
+  
+  // Extended Metadata
+  fileSize?: number;
+  mimeType?: string;
+  blockchainHash?: string;
+  uploadedBy?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface WorkflowInstance {

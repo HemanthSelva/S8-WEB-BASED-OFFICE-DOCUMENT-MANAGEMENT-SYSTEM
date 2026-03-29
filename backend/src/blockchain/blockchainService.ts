@@ -9,7 +9,11 @@ const DocumentRegistryABI = [
     "function updateDocumentVersion(string memory _documentId, string memory _newHash, string memory _uploaderId) public",
     "function getDocumentHash(string memory _documentId) public view returns (string memory)",
     "function verifyDocument(string memory _documentId, string memory _hash) public view returns (bool, uint256)",
-    "function getDocumentHistory(string memory _documentId) public view returns (tuple(string hash, string uploaderId, uint256 timestamp, uint256 version)[])"
+    "function getDocumentHistory(string memory _documentId) public view returns (tuple(string hash, string uploaderId, uint256 timestamp, uint256 version)[])",
+    "function logAccess(string memory _documentId, string memory _userId, string memory _actionType) public",
+    "function getAccessLogs(string memory _documentId) public view returns (tuple(string userId, string actionType, uint256 timestamp)[])",
+    "function signDocument(string memory _documentId, string memory _signerId, string memory _signatureHash, string memory _role) public",
+    "function getSignatures(string memory _documentId) public view returns (tuple(string signerId, string signatureHash, string role, uint256 timestamp)[])"
 ];
 
 class BlockchainService {
@@ -39,6 +43,10 @@ class BlockchainService {
             // We do not re-throw error to prevent backend crash.
             // isConnected remains false.
         }
+    }
+
+    public isAvailable(): boolean {
+        return this.isConnected;
     }
 
     async registerDocumentHash(documentId: string, hash: string, uploaderId: string): Promise<string | null> {
@@ -98,6 +106,64 @@ class BlockchainService {
             }));
         } catch (error) {
             console.error("Error fetching document history:", error);
+            return [];
+        }
+    }
+
+    // Phase 4: Access Logging & Signatures
+    async logDocumentAccess(documentId: string, userId: string, actionType: string): Promise<string | null> {
+        if (!this.isConnected) return null;
+        try {
+            console.log(`Logging ${actionType} access for document ${documentId} by user ${userId} on blockchain...`);
+            const tx = await this.contract.logAccess(documentId, userId, actionType);
+            await tx.wait();
+            return tx.hash;
+        } catch (error) {
+            console.error("Error logging document access on blockchain:", error);
+            return null;
+        }
+    }
+
+    async getAccessLogs(documentId: string) {
+        if (!this.isConnected) return [];
+        try {
+            const logs = await this.contract.getAccessLogs(documentId);
+            return logs.map((l: any) => ({
+                userId: l.userId,
+                actionType: l.actionType,
+                timestamp: Number(l.timestamp)
+            }));
+        } catch (error) {
+            console.error("Error fetching access logs:", error);
+            return [];
+        }
+    }
+
+    async signDocument(documentId: string, signerId: string, signatureHash: string, role: string): Promise<string | null> {
+        if (!this.isConnected) return null;
+        try {
+            console.log(`Signing document ${documentId} on blockchain...`);
+            const tx = await this.contract.signDocument(documentId, signerId, signatureHash, role);
+            await tx.wait();
+            return tx.hash;
+        } catch (error) {
+            console.error("Error signing document on blockchain:", error);
+            return null;
+        }
+    }
+
+    async getSignatures(documentId: string) {
+        if (!this.isConnected) return [];
+        try {
+            const sigs = await this.contract.getSignatures(documentId);
+            return sigs.map((s: any) => ({
+                signerId: s.signerId,
+                signatureHash: s.signatureHash,
+                role: s.role,
+                timestamp: Number(s.timestamp)
+            }));
+        } catch (error) {
+            console.error("Error fetching document signatures:", error);
             return [];
         }
     }
