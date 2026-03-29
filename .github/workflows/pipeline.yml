@@ -51,8 +51,8 @@ jobs:
         MINIO_BUCKET_NAME: intellidocx-documents
         ELASTICSEARCH_NODE: http://localhost:9200
         BLOCKCHAIN_RPC_URL: http://localhost:8545
-        PRIVATE_KEY: 0xf4c88568fb1acfdb09a2f8e4177a304bac829d15fae31c66a61e9ea368cbd83e
-        CONTRACT_ADDRESS: 0xc3c56a7397b9c917fa545c4e6f375d41b24ecdc8
+        PRIVATE_KEY: "0xf4c88568fb1acfdb09a2f8e4177a304bac829d15fae31c66a61e9ea368cbd83e"
+        CONTRACT_ADDRESS: "0xc3c56a7397b9c917fa545c4e6f375d41b24ecdc8"
         JWT_ACCESS_SECRET: testsecret
         JWT_REFRESH_SECRET: testsecret
       run: npm test
