@@ -19,11 +19,13 @@ jobs:
         node-version: '20'
         
     - name: Start Services
-      run: docker compose up -d postgres redis minio
+      run: docker compose up -d postgres redis minio elasticsearch ganache
       
     - name: Wait for Services
       run: |
         timeout 60s sh -c 'until docker exec intellidocx-postgres pg_isready -U postgres; do sleep 2; done'
+        timeout 60s sh -c 'until curl -s http://localhost:9200/_cluster/health; do sleep 5; done'
+        timeout 60s sh -c 'until curl -s -X POST -H "Content-Type: application/json" --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}" http://localhost:8545; do sleep 2; done'
         
     - name: Install Backend Dependencies
       working-directory: ./backend
@@ -47,6 +49,10 @@ jobs:
         MINIO_ACCESS_KEY: minioadmin
         MINIO_SECRET_KEY: minioadmin
         MINIO_BUCKET_NAME: intellidocx-documents
+        ELASTICSEARCH_NODE: http://localhost:9200
+        BLOCKCHAIN_RPC_URL: http://localhost:8545
+        PRIVATE_KEY: 0xf4c88568fb1acfdb09a2f8e4177a304bac829d15fae31c66a61e9ea368cbd83e
+        CONTRACT_ADDRESS: 0xc3c56a7397b9c917fa545c4e6f375d41b24ecdc8
         JWT_ACCESS_SECRET: testsecret
         JWT_REFRESH_SECRET: testsecret
       run: npm test
