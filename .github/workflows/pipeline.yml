@@ -25,6 +25,29 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v3
     
@@ -49,6 +72,11 @@ jobs:
       env:
         DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx_test
         DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        REDIS_URL: redis://localhost:6379
+        MINIO_ENDPOINT: localhost
+        MINIO_PORT: 9000
+        MINIO_ACCESS_KEY: minioadmin
+        MINIO_SECRET_KEY: minioadmin
         JWT_ACCESS_SECRET: testsecret
         JWT_REFRESH_SECRET: testsecret
       run: npm test
