@@ -10,44 +10,6 @@ jobs:
   backend-test:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: intellidocx_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      minio:
-        image: minio/minio
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
     - uses: actions/checkout@v3
     
@@ -56,6 +18,13 @@ jobs:
       with:
         node-version: '20'
         
+    - name: Start Services
+      run: docker-compose up -d postgres redis minio
+      
+    - name: Wait for Services
+      run: |
+        timeout 60s sh -c 'until docker exec intellidocx-postgres pg_isready -U postgres; do sleep 2; done'
+        
     - name: Install Backend Dependencies
       working-directory: ./backend
       run: npm ci
@@ -63,23 +32,28 @@ jobs:
     - name: Run Migrations (Test DB)
       working-directory: ./backend
       env:
-        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx_test
-        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx
+        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx
       run: npx prisma migrate deploy
 
     - name: Run Tests
       working-directory: ./backend
       env:
-        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx_test
-        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx_test
+        DATABASE_URL: postgres://postgres:password@localhost:5432/intellidocx
+        DIRECT_URL: postgres://postgres:password@localhost:5432/intellidocx
         REDIS_URL: redis://localhost:6379
         MINIO_ENDPOINT: localhost
         MINIO_PORT: 9000
         MINIO_ACCESS_KEY: minioadmin
         MINIO_SECRET_KEY: minioadmin
+        MINIO_BUCKET_NAME: intellidocx-documents
         JWT_ACCESS_SECRET: testsecret
         JWT_REFRESH_SECRET: testsecret
       run: npm test
+
+    - name: Stop Services
+      if: always()
+      run: docker-compose down
 
   frontend-build:
     runs-on: ubuntu-latest
